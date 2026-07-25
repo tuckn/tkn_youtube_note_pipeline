@@ -1,8 +1,8 @@
-# youtube-note-pipeline
+# tkn_youtube_note_pipeline
 
 [English](README.md)
 
-`youtube-note-pipeline`は、1本のYouTube動画を次の再現可能な3層へ変換します。
+`tkn_youtube_note_pipeline`は、1本のYouTube動画を次の再現可能な3層へ変換します。
 
 1. 不変なraw metadata、字幕、capture manifest
 2. provenanceと完全なTranscriptを持つsource Markdownノート

@@ -1,8 +1,8 @@
-# youtube-note-pipeline
+# tkn_youtube_note_pipeline
 
 [日本語](README_ja.md)
 
-`youtube-note-pipeline` turns one YouTube video into three reproducible data
+`tkn_youtube_note_pipeline` turns one YouTube video into three reproducible data
 layers:
 
 1. immutable raw metadata, captions, and a capture manifest;
