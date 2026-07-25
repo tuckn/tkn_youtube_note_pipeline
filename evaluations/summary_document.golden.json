@@ -1,0 +1,22 @@
+{
+  "description": "A short source-faithful description.",
+  "summary": "A source-faithful summary.",
+  "structuring": [
+    {
+      "heading": "Central idea",
+      "details": [
+        "A supporting detail."
+      ]
+    }
+  ],
+  "key_points": [
+    {
+      "text": "A timestamped key point.",
+      "timestamp_seconds": 0
+    }
+  ],
+  "technical_terms": [
+    "term: definition grounded in the source"
+  ],
+  "conclusion": "The conclusion stated by the source."
+}

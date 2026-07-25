@@ -1,0 +1,11 @@
+{
+  "id": "TESTVID0001",
+  "title": "Synthetic pipeline test video",
+  "description": "A deterministic fixture.",
+  "uploader": "Example Channel",
+  "uploader_url": "https://www.youtube.com/@example",
+  "upload_date": "20260523",
+  "duration": 12.0,
+  "thumbnail": "https://i.ytimg.com/vi/TESTVID0001/maxresdefault.jpg",
+  "language": "ja"
+}

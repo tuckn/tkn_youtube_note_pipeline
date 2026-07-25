@@ -1,0 +1,48 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "youtube-note-pipeline"
+version = "0.1.0"
+description = "A reproducible YouTube raw-to-source-to-summary note pipeline."
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+authors = [{ name = "Tuckn" }]
+dependencies = [
+  "pydantic>=2.10,<3",
+  "PyYAML>=6.0,<7",
+  "yt-dlp>=2025.6.30",
+]
+
+[project.scripts]
+youtube-notes = "youtube_note_pipeline.cli:main"
+
+[dependency-groups]
+dev = [
+  "mypy>=1.16",
+  "pytest>=8.4",
+  "ruff>=0.12",
+  "types-PyYAML>=6.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/youtube_note_pipeline"]
+
+[tool.pytest.ini_options]
+addopts = "-q"
+testpaths = ["tests"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+packages = ["youtube_note_pipeline"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
