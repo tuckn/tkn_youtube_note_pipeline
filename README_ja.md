@@ -149,7 +149,14 @@ youtube-notes ingest "https://www.youtube.com/watch?v=VIDEO_ID" --verbose
 4. `--config`で指定したファイル
 5. 個別のCLI option
 
-`./.tkn/config.yaml`の例:
+commit済みのexampleを`./.tkn/config.yaml`へコピーしてから、使用環境に合わせて
+変更してください。
+
+```console
+Copy-Item .tkn\config.example.yaml .tkn\config.yaml
+```
+
+exampleの内容:
 
 ```yaml
 raw_root: ./data/raw

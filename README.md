@@ -158,7 +158,14 @@ Configuration is merged in this order:
 4. a file passed with `--config`;
 5. individual CLI options.
 
-Example `./.tkn/config.yaml`:
+Copy the committed example to `./.tkn/config.yaml`, then customize it for your
+environment:
+
+```console
+Copy-Item .tkn\config.example.yaml .tkn\config.yaml
+```
+
+The example contains:
 
 ```yaml
 raw_root: ./data/raw

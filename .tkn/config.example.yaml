@@ -1,0 +1,13 @@
+# Copy this file to .tkn/config.yaml and customize it for your environment.
+# Relative paths are resolved from the current working directory.
+
+raw_root: ./data/raw
+source_root: ./data/source
+summary_root: ./data/summary
+reports_root: ./data/reports
+
+provider: codex
+model: null
+fallback_languages:
+  - en
+codex_executable: codex
