@@ -25,16 +25,26 @@ embedded `YoutubeDL` API経由で呼び出されます。別途`yt-dlp` CLIを�
 
 ## インストール
 
+リポジトリ内のソースコードの変更を再インストールなしで反映するeditable
+installation:
+
 ```console
-uv tool install -e .
+uv tool install -e "C:\path\to\tkn_youtube_note_pipeline"
 youtube-notes config show
 ```
+
+例示したパスは、このリポジトリの実際のフォルダパスに置き換えてください。
+リポジトリのパスを明示しているため、どのworking directoryからでも実行できます。
 
 non-editable installationへ切り替える場合:
 
 ```console
-uv tool install . --force
+uv tool install "C:\path\to\tkn_youtube_note_pipeline" --force
 ```
+
+non-editable installationは、その後のリポジトリの変更を追従しません。
+リポジトリを更新した後（例: `git pull`の実行後）、変更をインストール済みの
+`youtube-notes`へ反映するには、同じコマンドを再度実行してください。
 
 ## コマンド
 

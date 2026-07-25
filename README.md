@@ -28,16 +28,27 @@ Codex credentials.
 
 ## Install
 
+For an editable installation, which reflects source-code changes without
+reinstallation:
+
 ```console
-uv tool install -e .
+uv tool install -e "C:\path\to\tkn_youtube_note_pipeline"
 youtube-notes config show
 ```
+
+Replace the example path with the path to this repository on your computer.
+Because the repository path is specified explicitly, the command can be run
+from any working directory.
 
 For a non-editable installation:
 
 ```console
-uv tool install . --force
+uv tool install "C:\path\to\tkn_youtube_note_pipeline" --force
 ```
+
+The non-editable installation does not track subsequent changes to the
+repository. After updating the repository, for example with `git pull`, run the
+same command again to install the updated version.
 
 ## Commands
 
