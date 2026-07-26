@@ -116,6 +116,11 @@ def test_changed_caption_is_a_source_collision(tmp_path: Path) -> None:
     with pytest.raises(FileExistsError, match="collision"):
         build_source(changed_manifest, tmp_path / "source")
 
+    replaced = build_source(changed_manifest, tmp_path / "source", overwrite=True)
+    assert replaced.status == "updated"
+    assert "変更された論点です。" in replaced.path.read_text(encoding="utf-8")
+    assert validate_source(replaced.path) == []
+
 
 def test_transcript_validation_failure_does_not_persist_source(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch

@@ -63,6 +63,18 @@ source note, then generates the structured summary note. It stops before
 creating derived notes when caption acquisition fails, and writes a JSON run
 report whether the run succeeds or fails.
 
+If different source or summary content already exists at the target paths and
+you intentionally want to regenerate and replace both notes, use `--force`.
+`--overwrite` is an alias with the same behavior.
+
+```console
+youtube-notes ingest "https://www.youtube.com/watch?v=VIDEO_ID" --force
+```
+
+Because `--force` replaces existing source and summary content, including
+reviewed edits, use it only after confirming that regeneration is intended. Add
+`--refresh` when you also want to create a fresh raw capture.
+
 Capture only the raw inputs:
 
 ```console

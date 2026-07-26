@@ -58,6 +58,17 @@ metadataと字幕のraw capture、完全なTranscriptを持つsourceノート、
 summaryノートを順に生成します。字幕取得に失敗した場合はderived noteを作らずに停止し、
 成功・失敗のどちらでもJSON run reportを残します。
 
+同じ保存先に内容の異なるsourceまたはsummaryノートがあり、意図的に両方を再生成して
+上書きする場合は`--force`を指定します。`--overwrite`も同じ意味のaliasです。
+
+```console
+youtube-notes ingest "https://www.youtube.com/watch?v=VIDEO_ID" --force
+```
+
+`--force`はsourceとsummaryの既存内容（review済みの編集を含む）を置き換えるため、
+再生成してよいことを確認した場合だけ使用してください。raw captureも新しく取得する
+場合は`--refresh --force`を併用します。
+
 raw inputだけを取得します。
 
 ```console

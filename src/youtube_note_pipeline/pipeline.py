@@ -249,7 +249,10 @@ def run_import(
 
 
 def ingest(
-    url: str, config: PipelineConfig, refresh: bool = False
+    url: str,
+    config: PipelineConfig,
+    refresh: bool = False,
+    overwrite: bool = False,
 ) -> tuple[list[StageResult], Path]:
     stages: list[StageResult] = []
     logger.info("Starting ingest: %s", url)
@@ -258,9 +261,18 @@ def ingest(
         stages.append(raw_stage)
         if raw_stage.details["capture_status"] != "success":
             raise RuntimeError(str(raw_stage.details.get("error") or "caption acquisition failed"))
-        source_stage = build_source(raw_stage.path, config.source_root)
+        source_stage = build_source(
+            raw_stage.path,
+            config.source_root,
+            overwrite=overwrite,
+        )
         stages.append(source_stage)
-        summary_stage = build_summary(source_stage.path, config.summary_root, _provider(config))
+        summary_stage = build_summary(
+            source_stage.path,
+            config.summary_root,
+            _provider(config),
+            overwrite=overwrite,
+        )
         stages.append(summary_stage)
     except Exception as exc:
         report = write_report(config, "ingest", stages, str(exc))

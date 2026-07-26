@@ -69,6 +69,13 @@ def build_parser() -> argparse.ArgumentParser:
     ingest_parser = subparsers.add_parser("ingest", help="run raw, source, and summary stages")
     ingest_parser.add_argument("video_url")
     ingest_parser.add_argument("--refresh", action="store_true")
+    ingest_parser.add_argument(
+        "--force",
+        "--overwrite",
+        dest="overwrite",
+        action="store_true",
+        help="overwrite existing source and summary notes with regenerated content",
+    )
     _common(ingest_parser)
 
     acquire_parser = subparsers.add_parser("acquire", help="capture metadata and captions")
@@ -139,7 +146,12 @@ def main(argv: list[str] | None = None) -> int:
             )
             return 0
         if args.command == "ingest":
-            stages, report = ingest(args.video_url, config, args.refresh)
+            stages, report = ingest(
+                args.video_url,
+                config,
+                refresh=args.refresh,
+                overwrite=args.overwrite,
+            )
             _print_result(stages[-1].path, stages[-1].status, report)
             return 0
         if args.command == "acquire":
