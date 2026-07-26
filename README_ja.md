@@ -116,7 +116,7 @@ merge後の非secret設定と、実際に読み込まれた設定sourceを表示
 contentの取得や生成は行いません。
 
 version 1は1回の実行につき1本の動画URLだけを受け付け、playlist URLとchannel URLを
-拒否します。既定の出力先は`./youtube-notes/`以下です。
+拒否します。永続データの既定の出力先は`~/.tkn/youtube_note_pipeline/`以下です。
 
 生成AIを使うコマンドは`ingest`と`build-summary`だけです。`ingest`は内部にsummary
 stageを含むため生成AIを使います。`acquire`、`import-raw`、`build-source`、
@@ -144,25 +144,28 @@ youtube-notes ingest "https://www.youtube.com/watch?v=VIDEO_ID" --verbose
 設定は次の順にmergeされ、後の値が前の値を上書きします。
 
 1. built-in defaults
-2. `~/.tkn/youtube-note-pipeline/config.yaml`
+2. `~/.tkn/youtube_note_pipeline/config.yaml`
 3. `./.tkn/config.yaml`
 4. `--config`で指定したファイル
 5. 個別のCLI option
 
-commit済みのexampleを`./.tkn/config.yaml`へコピーしてから、使用環境に合わせて
-変更してください。
+user-global configを作成するには、commit済みのexampleをコピーしてから、使用環境に
+合わせて変更してください。
 
 ```console
-Copy-Item .tkn\config.example.yaml .tkn\config.yaml
+New-Item -ItemType Directory -Force "$HOME\.tkn\youtube_note_pipeline"
+Copy-Item ".tkn\config.example.yaml" "$HOME\.tkn\youtube_note_pipeline\config.yaml"
 ```
+
+repository-localなoverrideとして使う場合は、代わりに`./.tkn/config.yaml`へコピーします。
 
 exampleの内容:
 
 ```yaml
-raw_root: ./data/raw
-source_root: ./data/source
-summary_root: ./data/summary
-reports_root: ./data/reports
+raw_root: ~/.tkn/youtube_note_pipeline/data/raw
+source_root: ~/.tkn/youtube_note_pipeline/data/source
+summary_root: ~/.tkn/youtube_note_pipeline/data/summary
+reports_root: ~/.tkn/youtube_note_pipeline/state/reports
 provider: codex
 model: null
 fallback_languages:
@@ -172,6 +175,43 @@ codex_executable: codex
 
 relative pathはcurrent working directoryを基準に解決します。privateなmachine pathや
 credentialをpublic repositoryへcommitしないでください。
+
+### ユーザーディレクトリの構成
+
+user-levelの既定レイアウトは次のとおりです。
+
+```text
+~/.tkn/youtube_note_pipeline/
+  config.yaml
+  data/
+    raw/
+    source/
+    summary/
+  state/
+    reports/
+
+~/.cache/youtube_note_pipeline/
+  yt-dlp/
+```
+
+このレイアウトは、
+[XDG Base Directory Specification](https://specifications.freedesktop.org/basedir-spec/latest/)
+によるconfig、永続data、永続state、破棄可能なcache、runtime fileの分離を尊重しながら、
+user home以下の固定されたcross-platformな場所を使用します。
+
+設定ファイルが1つだけの現状では`config/config.yaml`としても有用な区別が増えないため、
+`config.yaml`はapplication directoryの直下に置きます。raw capture、sourceノート、
+summaryノートは永続的なuser data、run reportは永続的なapplication stateです。
+破棄可能なcache dataは`~/.cache/youtube_note_pipeline/`以下へ保存します。
+
+providerだけが使用する一時ファイルには、Pythonがplatformごとに解決するtemp
+directory（Windowsでは`%TMP%`、Linuxでは標準temp directory）を使います。
+atomic writeのstaging fileは、置換を同一filesystem内に保ってatomicにできるよう
+保存先の隣に作成し、同じoperation内で削除または正式ファイルへ置き換えます。
+
+旧`~/.tkn/youtube-note-pipeline/`directoryは検索しません。以前のversionから更新する
+場合は、`config.yaml`をunderscore表記の新directoryへ移動し、既存reportを
+`state/reports/`以下へ移動してください。
 
 Windowsで自動処理とinteractive PowerShellが異なる`codex`を解決する場合は、
 user-global configまたは`--config`で渡す設定の`codex_executable`に、動作する

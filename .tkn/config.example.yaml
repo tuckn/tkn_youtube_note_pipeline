@@ -1,10 +1,11 @@
-# Copy this file to .tkn/config.yaml and customize it for your environment.
-# Relative paths are resolved from the current working directory.
+# Copy this file to ~/.tkn/youtube_note_pipeline/config.yaml for user-global settings,
+# or to .tkn/config.yaml for a repository-local override.
+# These paths match the built-in user-level data and state layout.
 
-raw_root: ./data/raw
-source_root: ./data/source
-summary_root: ./data/summary
-reports_root: ./data/reports
+raw_root: ~/.tkn/youtube_note_pipeline/data/raw
+source_root: ~/.tkn/youtube_note_pipeline/data/source
+summary_root: ~/.tkn/youtube_note_pipeline/data/summary
+reports_root: ~/.tkn/youtube_note_pipeline/state/reports
 
 provider: codex
 model: null

@@ -8,6 +8,8 @@ from typing import Any
 import yaml
 from pydantic import BaseModel, ConfigDict, Field
 
+APP_DIRECTORY = "youtube_note_pipeline"
+
 
 class PipelineConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -27,13 +29,29 @@ class ResolvedConfig(BaseModel):
     sources: list[str]
 
 
-def default_values(cwd: Path) -> dict[str, Any]:
-    output = cwd / "youtube-notes"
+def user_root() -> Path:
+    return Path.home() / ".tkn" / APP_DIRECTORY
+
+
+def user_data_root() -> Path:
+    return user_root() / "data"
+
+
+def user_state_root() -> Path:
+    return user_root() / "state"
+
+
+def user_cache_root() -> Path:
+    return Path.home() / ".cache" / APP_DIRECTORY
+
+
+def default_values() -> dict[str, Any]:
+    data = user_data_root()
     return {
-        "raw_root": output / "raw",
-        "source_root": output / "source",
-        "summary_root": output / "summary",
-        "reports_root": output / "reports",
+        "raw_root": data / "raw",
+        "source_root": data / "source",
+        "summary_root": data / "summary",
+        "reports_root": user_state_root() / "reports",
         "provider": "codex",
         "model": None,
         "fallback_languages": [],
@@ -42,7 +60,7 @@ def default_values(cwd: Path) -> dict[str, Any]:
 
 
 def global_config_path() -> Path:
-    return Path.home() / ".tkn" / "youtube-note-pipeline" / "config.yaml"
+    return user_root() / "config.yaml"
 
 
 def _load_yaml(path: Path) -> dict[str, Any]:
@@ -71,7 +89,7 @@ def resolve_config(
     overrides: dict[str, Any] | None = None,
 ) -> ResolvedConfig:
     current = (cwd or Path.cwd()).resolve()
-    values = default_values(current)
+    values = default_values()
     sources = ["built-in defaults"]
     candidates = [global_config_path(), current / ".tkn" / "config.yaml"]
     if explicit_config:

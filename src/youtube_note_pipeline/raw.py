@@ -13,6 +13,7 @@ from urllib.request import Request, urlopen
 
 from youtube_note_pipeline import __version__
 from youtube_note_pipeline.captions import parse_json3, select_caption
+from youtube_note_pipeline.config import user_cache_root
 from youtube_note_pipeline.io import sha256_bytes
 from youtube_note_pipeline.models import (
     ArtifactDigest,
@@ -22,6 +23,16 @@ from youtube_note_pipeline.models import (
 )
 
 VIDEO_ID = re.compile(r"^[A-Za-z0-9_-]{11}$")
+
+
+def _youtube_dl_options() -> dict[str, Any]:
+    return {
+        "cachedir": str(user_cache_root() / "yt-dlp"),
+        "skip_download": True,
+        "quiet": True,
+        "no_warnings": True,
+        "noplaylist": True,
+    }
 
 
 def canonical_video_url(url: str) -> tuple[str, str]:
@@ -149,13 +160,7 @@ def acquire(
     try:
         import yt_dlp  # type: ignore[import-untyped]
 
-        options = {
-            "skip_download": True,
-            "quiet": True,
-            "no_warnings": True,
-            "noplaylist": True,
-        }
-        with yt_dlp.YoutubeDL(options) as ydl:
+        with yt_dlp.YoutubeDL(_youtube_dl_options()) as ydl:
             extracted = ydl.extract_info(canonical_url, download=False)
             info = ydl.sanitize_info(extracted)
         if str(info.get("id")) != video_id:

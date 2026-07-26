@@ -124,7 +124,8 @@ This prints the merged non-secret settings and the configuration sources that
 were actually loaded. It does not acquire or generate any content.
 
 Version 1 accepts one video URL per invocation and rejects playlist and channel
-URLs. By default, output is written below `./youtube-notes/`.
+URLs. By default, durable output is written below
+`~/.tkn/youtube_note_pipeline/`.
 
 Only `ingest` and `build-summary` use generative AI. `ingest` uses it because
 the command includes the summary stage. `acquire`, `import-raw`, `build-source`,
@@ -153,25 +154,29 @@ youtube-notes ingest "https://www.youtube.com/watch?v=VIDEO_ID" --verbose
 Configuration is merged in this order:
 
 1. built-in defaults;
-2. `~/.tkn/youtube-note-pipeline/config.yaml`;
+2. `~/.tkn/youtube_note_pipeline/config.yaml`;
 3. `./.tkn/config.yaml`;
 4. a file passed with `--config`;
 5. individual CLI options.
 
-Copy the committed example to `./.tkn/config.yaml`, then customize it for your
-environment:
+To create the user-global configuration, copy the committed example and then
+customize it for your environment:
 
 ```console
-Copy-Item .tkn\config.example.yaml .tkn\config.yaml
+New-Item -ItemType Directory -Force "$HOME\.tkn\youtube_note_pipeline"
+Copy-Item ".tkn\config.example.yaml" "$HOME\.tkn\youtube_note_pipeline\config.yaml"
 ```
+
+For a repository-local override, copy the example to `./.tkn/config.yaml`
+instead.
 
 The example contains:
 
 ```yaml
-raw_root: ./data/raw
-source_root: ./data/source
-summary_root: ./data/summary
-reports_root: ./data/reports
+raw_root: ~/.tkn/youtube_note_pipeline/data/raw
+source_root: ~/.tkn/youtube_note_pipeline/data/source
+summary_root: ~/.tkn/youtube_note_pipeline/data/summary
+reports_root: ~/.tkn/youtube_note_pipeline/state/reports
 provider: codex
 model: null
 fallback_languages:
@@ -181,6 +186,46 @@ codex_executable: codex
 
 Relative paths are resolved from the current working directory. Do not commit
 private machine paths or credentials to a public repository.
+
+### User directory layout
+
+The default user-level layout is:
+
+```text
+~/.tkn/youtube_note_pipeline/
+  config.yaml
+  data/
+    raw/
+    source/
+    summary/
+  state/
+    reports/
+
+~/.cache/youtube_note_pipeline/
+  yt-dlp/
+```
+
+This layout follows the
+[XDG Base Directory Specification](https://specifications.freedesktop.org/basedir-spec/latest/)'s
+separation of configuration, durable data, persistent state, disposable cache,
+and runtime files while retaining fixed, cross-platform locations below the
+user's home directory.
+
+`config.yaml` is kept directly under the application directory because a
+separate `config/config.yaml` hierarchy would add no useful distinction while
+there is only one configuration file. Raw captures, source notes, and summaries
+are durable user data. Run reports are persistent application state. Disposable
+cache data is stored below `~/.cache/youtube_note_pipeline/`.
+
+Provider-only temporary files use Python's platform temporary directory
+resolution (`%TMP%` on Windows and the standard temporary directory on
+Linux). Atomic-write staging files are created next to their destination and
+removed or promoted within the same operation so that replacement stays on one
+filesystem and can remain atomic.
+
+The former `~/.tkn/youtube-note-pipeline/` directory is not searched. When
+upgrading from an earlier version, move `config.yaml` to the new underscored
+directory and move existing reports below `state/reports/`.
 
 On Windows, if `codex` resolves to a different executable in an automated
 process than it does in an interactive PowerShell session, set

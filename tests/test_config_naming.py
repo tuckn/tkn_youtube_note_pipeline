@@ -1,6 +1,13 @@
 from pathlib import Path
 
-from youtube_note_pipeline.config import resolve_config
+from youtube_note_pipeline.config import (
+    global_config_path,
+    resolve_config,
+    user_cache_root,
+    user_data_root,
+    user_root,
+    user_state_root,
+)
 from youtube_note_pipeline.naming import (
     build_filename,
     file_uri_to_path,
@@ -9,6 +16,8 @@ from youtube_note_pipeline.naming import (
 
 
 def test_config_precedence(tmp_path: Path, monkeypatch) -> None:
+    configured_root = tmp_path / "user-root"
+    monkeypatch.setattr("youtube_note_pipeline.config.user_root", lambda: configured_root)
     monkeypatch.setattr(
         "youtube_note_pipeline.config.global_config_path",
         lambda: tmp_path / "missing-global.yaml",
@@ -26,9 +35,21 @@ def test_config_precedence(tmp_path: Path, monkeypatch) -> None:
     assert resolved.config.provider == "codex"
     assert resolved.config.raw_root == tmp_path / "cli-raw"
     assert resolved.config.source_root == tmp_path / "explicit-source"
-    assert resolved.config.summary_root == tmp_path / "youtube-notes" / "summary"
+    assert resolved.config.summary_root == configured_root / "data" / "summary"
+    assert resolved.config.reports_root == configured_root / "state" / "reports"
     assert str(cwd_config) in resolved.sources
     assert resolved.sources[-1] == "CLI options"
+
+
+def test_user_directory_layout(tmp_path: Path, monkeypatch) -> None:
+    configured_home = tmp_path / "home"
+    monkeypatch.setattr(Path, "home", lambda: configured_home)
+
+    assert user_root() == configured_home / ".tkn" / "youtube_note_pipeline"
+    assert global_config_path() == user_root() / "config.yaml"
+    assert user_data_root() == user_root() / "data"
+    assert user_state_root() == user_root() / "state"
+    assert user_cache_root() == configured_home / ".cache" / "youtube_note_pipeline"
 
 
 def test_filename_is_android_safe() -> None:

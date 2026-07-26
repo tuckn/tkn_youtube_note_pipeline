@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 
 from youtube_note_pipeline.io import atomic_write
-from youtube_note_pipeline.raw import canonical_video_url, import_raw
+from youtube_note_pipeline.raw import _youtube_dl_options, canonical_video_url, import_raw
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -41,3 +41,8 @@ def test_atomic_write_unchanged_and_collision(tmp_path: Path) -> None:
 def test_rejects_playlist_url() -> None:
     with pytest.raises(ValueError, match="playlist"):
         canonical_video_url("https://www.youtube.com/watch?v=TESTVID0001&list=PL000000000000000")
+
+
+def test_youtube_dl_cache_uses_user_cache_root(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr("youtube_note_pipeline.raw.user_cache_root", lambda: tmp_path)
+    assert _youtube_dl_options()["cachedir"] == str(tmp_path / "yt-dlp")
