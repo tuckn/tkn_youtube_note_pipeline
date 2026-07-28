@@ -39,6 +39,9 @@ class FakeProvider:
             model="fixture",
             generator="Fake (fixture)",
             provider_version="test",
+            prompt_version="test-envelope-v1",
+            prompt_source="test:fixture.md",
+            prompt_sha256="1" * 64,
         )
 
 
@@ -59,6 +62,9 @@ def test_full_synthetic_pipeline_and_idempotency(tmp_path: Path) -> None:
 
     summary = build_summary(source.path, tmp_path / "summary", FakeProvider())
     assert summary.status == "created"
+    assert summary.details["prompt_version"] == "test-envelope-v1"
+    assert summary.details["prompt_source"] == "test:fixture.md"
+    assert summary.details["prompt_sha256"] == "1" * 64
     assert validate_summary(summary.path, tmp_path / "source") == []
     assert build_summary(source.path, tmp_path / "summary", FakeProvider()).status == "unchanged"
 

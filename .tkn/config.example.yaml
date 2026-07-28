@@ -12,3 +12,7 @@ model: null
 fallback_languages:
   - en
 codex_executable: codex
+
+# null uses the built-in prompt. A filename is resolved below
+# ~/.tkn/youtube_note_pipeline/prompts/. Use an absolute path for other locations.
+summary_prompt: null

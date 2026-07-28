@@ -10,6 +10,10 @@ import tempfile
 from pathlib import Path
 
 from youtube_note_pipeline.models import SummaryDocument, SummaryRequest
+from youtube_note_pipeline.prompting import (
+    load_summary_prompt,
+    render_summary_prompt,
+)
 from youtube_note_pipeline.providers.base import ProviderResult
 
 logger = logging.getLogger(__name__)
@@ -22,9 +26,15 @@ def _model_from_execution_log(stderr: str) -> str | None:
 
 
 class CodexProvider:
-    def __init__(self, executable: str = "codex", model: str | None = None) -> None:
+    def __init__(
+        self,
+        executable: str = "codex",
+        model: str | None = None,
+        summary_prompt: Path | None = None,
+    ) -> None:
         self.executable = executable
         self.model = model
+        self.summary_prompt = summary_prompt
 
     def preflight(self) -> str:
         logger.debug("Running Codex preflight: %s --version", self.executable)
@@ -49,18 +59,10 @@ class CodexProvider:
         return version
 
     def generate(self, request: SummaryRequest) -> ProviderResult:
+        prompt_spec = load_summary_prompt(self.summary_prompt)
+        prompt = render_summary_prompt(prompt_spec, request)
         provider_version = self.preflight()
         schema = SummaryDocument.model_json_schema()
-        prompt = (
-            "Produce a source-faithful Japanese summary of the supplied YouTube transcript. "
-            "Do not add external knowledge, criticism, or invented facts. Reorganize the content "
-            "from abstract ideas to concrete examples. Timestamps must refer only to timestamps "
-            "present in the transcript. Return only JSON that matches the supplied schema.\n\n"
-            f"PROMPT_VERSION: {request.prompt_version}\n"
-            f"TITLE: {request.video.title}\n"
-            f"URL: {request.video.canonical_url}\n\n"
-            f"TRANSCRIPT:\n{request.transcript}\n"
-        )
         with tempfile.TemporaryDirectory(prefix="youtube-notes-codex-") as temp:
             schema_path = Path(temp) / "summary.schema.json"
             output_path = Path(temp) / "summary.json"
@@ -114,4 +116,7 @@ class CodexProvider:
             model=effective_model,
             generator=generator,
             provider_version=provider_version,
+            prompt_version=request.prompt_version,
+            prompt_source=prompt_spec.source,
+            prompt_sha256=prompt_spec.sha256,
         )

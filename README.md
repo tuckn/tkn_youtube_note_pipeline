@@ -109,12 +109,26 @@ Build a summary note from a valid source note:
 
 ```console
 youtube-notes build-summary path/to/source-note.md
+youtube-notes build-summary path/to/source-note.md --summary-prompt my-summary.md
 ```
 
 This sends the source transcript to the configured structured-output provider
 (Codex in version 1), creates the source-faithful Japanese summary note, and
 updates the source note description from `## 1. Summary`. It validates both
 notes and does not add semantic classification or ontology links.
+
+Initialize an editable copy of the built-in summary instructions:
+
+```console
+youtube-notes prompt init
+youtube-notes prompt init my-summary.md
+```
+
+This creates `summary.md`, or the supplied `.md` filename, below
+`~/.tkn/youtube_note_pipeline/prompts/`. It prints the created path as JSON and
+does not modify `config.yaml`. It refuses to overwrite an existing file. After
+editing the file, set `summary_prompt: my-summary.md` in a configuration file or
+pass `--summary-prompt my-summary.md` to a generating command.
 
 Validate one pipeline artifact:
 
@@ -133,7 +147,9 @@ youtube-notes config show
 ```
 
 This prints the merged non-secret settings and the configuration sources that
-were actually loaded. It does not acquire or generate any content.
+were actually loaded. For the summary prompt, it also validates the effective
+Markdown and reports its built-in/custom mode, resolved source, and SHA-256. It
+does not acquire or generate any content.
 
 Version 1 accepts one video URL per invocation and rejects playlist and channel
 URLs. By default, durable output is written below
@@ -194,10 +210,34 @@ model: null
 fallback_languages:
   - en
 codex_executable: codex
+summary_prompt: null
 ```
 
-Relative paths are resolved from the current working directory. Do not commit
-private machine paths or credentials to a public repository.
+Ordinary relative output paths are resolved from the current working directory.
+`summary_prompt` has stricter rules:
+
+- `null` uses the packaged built-in instructions.
+- A filename such as `my-summary.md` resolves below
+  `~/.tkn/youtube_note_pipeline/prompts/`.
+- A prompt elsewhere must use an absolute path; `~` home expansion is accepted.
+- Nested relative values such as `prompts/my-summary.md` are rejected.
+
+The file must be a non-empty UTF-8 `.md` file. A missing or invalid custom
+prompt stops summary generation instead of silently using the built-in prompt.
+The same resolution applies to `--summary-prompt`, which has the highest normal
+CLI precedence. Do not commit private machine paths or credentials to a public
+repository.
+
+Custom Markdown replaces only the human-editable summary instructions. The
+pipeline always appends the title, URL, transcript, transcript-as-untrusted-data
+guardrail, and structured JSON output contract. Changing a prompt does not
+overwrite an existing summary automatically: use `build-summary --overwrite` or
+`ingest --force` when intentional regeneration is required.
+
+The built-in instructions require source attribution, prohibit unsupported
+inference and external knowledge, organize the whole video by topic from
+abstract to concrete, omit nonessential advertising and calls to action, and
+define the expected content of each structured summary field.
 
 ### User directory layout
 
@@ -206,6 +246,8 @@ The default user-level layout is:
 ```text
 ~/.tkn/youtube_note_pipeline/
   config.yaml
+  prompts/
+    summary.md
   data/
     raw/
     source/
@@ -226,8 +268,13 @@ user's home directory.
 `config.yaml` is kept directly under the application directory because a
 separate `config/config.yaml` hierarchy would add no useful distinction while
 there is only one configuration file. Raw captures, source notes, and summaries
-are durable user data. Run reports are persistent application state. Disposable
-cache data is stored below `~/.cache/youtube_note_pipeline/`.
+are durable user data. User-edited prompt Markdown is a configuration asset kept
+in `prompts/`. Run reports are persistent application state. Disposable cache
+data is stored below `~/.cache/youtube_note_pipeline/`.
+
+Each generated summary stage records the application-managed prompt format
+version, prompt source, and prompt SHA-256 in its run report. Summary note
+Frontmatter is unchanged.
 
 Provider-only temporary files use Python's platform temporary directory
 resolution (`%TMP%` on Windows and the standard temporary directory on

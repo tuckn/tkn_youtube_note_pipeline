@@ -15,6 +15,9 @@ class ProviderResult:
     model: str | None
     generator: str
     provider_version: str | None
+    prompt_version: str | None = None
+    prompt_source: str | None = None
+    prompt_sha256: str | None = None
 
 
 class SummaryProvider(Protocol):

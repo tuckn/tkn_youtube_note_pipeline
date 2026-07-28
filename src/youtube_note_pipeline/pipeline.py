@@ -24,6 +24,7 @@ from youtube_note_pipeline.notes import (
     transcript_from_source,
     update_source_description,
 )
+from youtube_note_pipeline.prompting import PROMPT_VERSION
 from youtube_note_pipeline.providers import CodexProvider, SummaryProvider
 from youtube_note_pipeline.raw import acquire, import_raw
 from youtube_note_pipeline.validation import (
@@ -33,7 +34,6 @@ from youtube_note_pipeline.validation import (
     validate_summary,
 )
 
-PROMPT_VERSION = "youtube-summary-ja-v1"
 logger = logging.getLogger(__name__)
 
 
@@ -187,7 +187,9 @@ def build_summary(
             "provider": result.provider,
             "model": result.model,
             "provider_version": result.provider_version,
-            "prompt_version": PROMPT_VERSION,
+            "prompt_version": result.prompt_version or PROMPT_VERSION,
+            "prompt_source": result.prompt_source,
+            "prompt_sha256": result.prompt_sha256,
             "input_hash": input_hash,
             "source_status": source_status,
         },
@@ -197,7 +199,7 @@ def build_summary(
 def _provider(config: PipelineConfig) -> SummaryProvider:
     if config.provider != "codex":
         raise ValueError(f"unsupported provider in v1: {config.provider}")
-    return CodexProvider(config.codex_executable, config.model)
+    return CodexProvider(config.codex_executable, config.model, config.summary_prompt)
 
 
 def write_report(

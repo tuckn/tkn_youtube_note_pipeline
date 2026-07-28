@@ -101,12 +101,26 @@ provenanceと完全な時刻付きTranscriptを持つMarkdown sourceノートを
 
 ```console
 youtube-notes build-summary path/to/source-note.md
+youtube-notes build-summary path/to/source-note.md --summary-prompt my-summary.md
 ```
 
 sourceのTranscriptをconfigured structured-output provider（version 1ではCodex）へ渡し、
 sourceに忠実な日本語summaryノートを作ります。同時にsourceノートのdescriptionを
 `## 1. Summary`から更新し、両方のノートを検証します。semantic classificationや
 ontology linkは追加しません。
+
+組み込みのsummary指示を編集用ファイルとして初期化します。
+
+```console
+youtube-notes prompt init
+youtube-notes prompt init my-summary.md
+```
+
+`summary.md`または指定した`.md`ファイル名を
+`~/.tkn/youtube_note_pipeline/prompts/`以下へ作成し、作成先をJSONで表示します。
+`config.yaml`は変更せず、既存ファイルも上書きしません。編集後はconfigに
+`summary_prompt: my-summary.md`を設定するか、生成コマンドへ
+`--summary-prompt my-summary.md`を渡します。
 
 pipeline artifactを1件検証します。
 
@@ -124,7 +138,8 @@ youtube-notes config show
 ```
 
 merge後の非secret設定と、実際に読み込まれた設定sourceを表示します。
-contentの取得や生成は行いません。
+summary promptについては、有効なMarkdownを検証し、built-in/customのmode、
+解決済みsource、SHA-256も表示します。contentの取得や生成は行いません。
 
 version 1は1回の実行につき1本の動画URLだけを受け付け、playlist URLとchannel URLを
 拒否します。永続データの既定の出力先は`~/.tkn/youtube_note_pipeline/`以下です。
@@ -182,10 +197,31 @@ model: null
 fallback_languages:
   - en
 codex_executable: codex
+summary_prompt: null
 ```
 
-relative pathはcurrent working directoryを基準に解決します。privateなmachine pathや
-credentialをpublic repositoryへcommitしないでください。
+通常のrelativeな出力pathはcurrent working directoryを基準に解決します。
+`summary_prompt`には次の専用規則を適用します。
+
+- `null`はpackageに含まれる組み込み指示を使用
+- `my-summary.md`のようなファイル名だけの値は
+  `~/.tkn/youtube_note_pipeline/prompts/`以下として解決
+- その他の場所はabsolute pathで指定し、`~`によるhome展開も許可
+- `prompts/my-summary.md`のような階層を含むrelative pathは拒否
+
+custom promptは、空でないUTF-8の`.md`ファイルである必要があります。missingまたは
+不正な場合、組み込みpromptへ黙ってfallbackせず、summary生成を停止します。
+`--summary-prompt`にも同じ解決規則を適用し、通常のCLI優先順位で最優先になります。
+privateなmachine pathやcredentialをpublic repositoryへcommitしないでください。
+
+custom Markdownが置き換えるのは、人が編集できるsummary指示だけです。title、URL、
+Transcript、Transcriptを信頼できない入力dataとして扱うguardrail、structured JSONの
+出力契約はpipelineが必ず追加します。promptを変更しても既存summaryは自動上書きせず、
+意図的に再生成するときだけ`build-summary --overwrite`または`ingest --force`を使います。
+
+組み込み指示は、主張の帰属、根拠のない推測と外部知識の禁止、動画全体を抽象から具体へ
+論点別に再構成すること、主題に不要な広告とCTAの除外、structured summaryの各fieldに
+含める内容を明示しています。
 
 ### ユーザーディレクトリの構成
 
@@ -194,6 +230,8 @@ user-levelの既定レイアウトは次のとおりです。
 ```text
 ~/.tkn/youtube_note_pipeline/
   config.yaml
+  prompts/
+    summary.md
   data/
     raw/
     source/
@@ -212,8 +250,12 @@ user home以下の固定されたcross-platformな場所を使用します。
 
 設定ファイルが1つだけの現状では`config/config.yaml`としても有用な区別が増えないため、
 `config.yaml`はapplication directoryの直下に置きます。raw capture、sourceノート、
-summaryノートは永続的なuser data、run reportは永続的なapplication stateです。
-破棄可能なcache dataは`~/.cache/youtube_note_pipeline/`以下へ保存します。
+summaryノートは永続的なuser data、ユーザーが編集するprompt Markdownは`prompts/`に
+置くconfig資産、run reportは永続的なapplication stateです。破棄可能なcache dataは
+`~/.cache/youtube_note_pipeline/`以下へ保存します。
+
+summary生成stageのrun reportには、application管理のprompt format version、
+prompt source、prompt SHA-256を記録します。summaryノートのFrontmatterは変更しません。
 
 providerだけが使用する一時ファイルには、Pythonがplatformごとに解決するtemp
 directory（Windowsでは`%TMP%`、Linuxでは標準temp directory）を使います。

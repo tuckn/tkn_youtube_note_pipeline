@@ -22,6 +22,7 @@ class PipelineConfig(BaseModel):
     model: str | None = None
     fallback_languages: list[str] = Field(default_factory=list)
     codex_executable: str = "codex"
+    summary_prompt: Path | None = None
 
 
 class ResolvedConfig(BaseModel):
@@ -41,6 +42,10 @@ def user_state_root() -> Path:
     return user_root() / "state"
 
 
+def user_prompts_root() -> Path:
+    return user_root() / "prompts"
+
+
 def user_cache_root() -> Path:
     return Path.home() / ".cache" / APP_DIRECTORY
 
@@ -56,6 +61,7 @@ def default_values() -> dict[str, Any]:
         "model": None,
         "fallback_languages": [],
         "codex_executable": "codex",
+        "summary_prompt": None,
     }
 
 
@@ -80,6 +86,19 @@ def _resolve_paths(values: dict[str, Any], cwd: Path) -> dict[str, Any]:
     for key in ("raw_root", "source_root", "summary_root", "reports_root"):
         path = Path(result[key]).expanduser()
         result[key] = path if path.is_absolute() else (cwd / path).resolve()
+    prompt_value = result.get("summary_prompt")
+    if prompt_value is not None:
+        raw_prompt = str(prompt_value)
+        prompt_path = Path(raw_prompt).expanduser()
+        if prompt_path.is_absolute():
+            result["summary_prompt"] = prompt_path
+        elif Path(raw_prompt).name == raw_prompt:
+            result["summary_prompt"] = user_prompts_root() / prompt_path
+        else:
+            raise ValueError(
+                "summary_prompt must be a filename in the user prompts directory "
+                "or an absolute path"
+            )
     return result
 
 
@@ -119,4 +138,5 @@ def public_config(config: PipelineConfig) -> dict[str, Any]:
         "model": config.model,
         "fallback_languages": config.fallback_languages,
         "codex_executable": config.codex_executable,
+        "summary_prompt": str(config.summary_prompt) if config.summary_prompt else None,
     }
