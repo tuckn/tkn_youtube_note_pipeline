@@ -22,6 +22,8 @@ INVALID = str.maketrans(
     }
 )
 
+PROMPT_ID_FILENAME_PREFIX_LENGTHS = tuple(range(8, 33, 4))
+
 
 def sanitize_title(title: str) -> str:
     title = "".join(character for character in title if ord(character) >= 32)
@@ -60,12 +62,14 @@ def build_filename(published: str, title: str, limit: int = 200) -> tuple[str, s
     return str(published_date.year), filename
 
 
-def build_summary_filename(source_filename: str, prompt_id: str, limit: int = 200) -> str:
+def _build_suffixed_filename(
+    source_filename: str,
+    suffix: str,
+    limit: int,
+) -> str:
     if not source_filename.lower().endswith(".md"):
         raise ValueError("source filename must use the .md extension")
-    normalized_prompt_id = str(uuid.UUID(prompt_id))
-    suffix = f"__prompt-{normalized_prompt_id}.md"
-    budget = limit - len(suffix.encode("utf-8"))
+    budget = limit - len(suffix.encode("utf-8")) - 1
     stem = source_filename[:-3]
     shortened = ""
     for character in stem:
@@ -77,6 +81,26 @@ def build_summary_filename(source_filename: str, prompt_id: str, limit: int = 20
     if not shortened or len(filename.encode("utf-8")) >= limit:
         raise ValueError(f"summary filename must remain below {limit} UTF-8 bytes")
     return filename
+
+
+def build_summary_filename(
+    source_filename: str,
+    prompt_id: str,
+    limit: int = 200,
+    *,
+    prompt_id_prefix_length: int = PROMPT_ID_FILENAME_PREFIX_LENGTHS[0],
+) -> str:
+    if prompt_id_prefix_length not in PROMPT_ID_FILENAME_PREFIX_LENGTHS:
+        raise ValueError(
+            "prompt ID filename prefix length must be one of: "
+            + ", ".join(str(value) for value in PROMPT_ID_FILENAME_PREFIX_LENGTHS)
+        )
+    prompt_id_prefix = uuid.UUID(prompt_id).hex[:prompt_id_prefix_length]
+    return _build_suffixed_filename(
+        source_filename,
+        f"_{prompt_id_prefix}.md",
+        limit,
+    )
 
 
 def path_to_file_uri(path: Path) -> str:

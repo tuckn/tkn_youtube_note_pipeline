@@ -238,7 +238,11 @@ Transcript、Transcriptを信頼できない入力dataとして扱うguardrail�
 
 prompt identityはsummary identityを次のように決定します。
 
-- 異なるprompt `id`は、同じsourceから完全なprompt UUIDをファイル名に含む別summaryを作成
+- 異なるprompt `id`は、同じsourceから別summaryを作成。ファイル名には通常、
+  `_70a1a332.md`のようにUUIDの先頭8桁を使用し、完全UUIDはFrontmatterで保持。
+  先頭8桁が衝突した場合だけ、必要な長さまでprefixを延長
+- 既存summaryはファイル名ではなくFrontmatterの`url`と`promptId`で検索。完全UUID名や
+  手動rename後のファイルも同じsummaryとして再利用し、重複生成しない
 - 同じ`id`で`version`が異なる場合、同じsummaryを自動再生成し、`noteId`と`date`を保持、
   `updated`を更新して`reviewStatus: unreviewed`へ戻す
 - 同じ`id`と`version`はidempotentに`unchanged`

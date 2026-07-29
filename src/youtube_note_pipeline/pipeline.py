@@ -16,7 +16,11 @@ from youtube_note_pipeline.config import PipelineConfig
 from youtube_note_pipeline.console_logging import log_success
 from youtube_note_pipeline.io import atomic_write
 from youtube_note_pipeline.models import RawCaptureManifest, SummaryRequest, VideoSource
-from youtube_note_pipeline.naming import build_filename, build_summary_filename
+from youtube_note_pipeline.naming import (
+    PROMPT_ID_FILENAME_PREFIX_LENGTHS,
+    build_filename,
+    build_summary_filename,
+)
 from youtube_note_pipeline.notes import (
     render_source,
     render_summary,
@@ -108,6 +112,52 @@ def _frontmatter_datetime(value: Any) -> datetime:
     return datetime.fromisoformat(str(value))
 
 
+def _summary_target(
+    source_path: Path,
+    summary_root: Path,
+    canonical_url: str,
+    prompt_id: str,
+) -> Path:
+    summary_directory = summary_root / source_path.parent.name
+    matches: list[Path] = []
+    if summary_directory.is_dir():
+        for candidate in sorted(summary_directory.iterdir()):
+            if not candidate.is_file() or candidate.suffix.lower() != ".md":
+                continue
+            try:
+                metadata, _ = split_note(candidate.read_text(encoding="utf-8"))
+            except (OSError, UnicodeError, ValueError):
+                logger.debug(
+                    "Skipping summary candidate with unreadable Frontmatter: %s",
+                    candidate,
+                )
+                continue
+            if (
+                metadata.get("url") == canonical_url
+                and str(metadata.get("promptId") or "") == prompt_id
+            ):
+                matches.append(candidate)
+    if len(matches) > 1:
+        paths = ", ".join(str(path) for path in matches)
+        raise FileExistsError(
+            "multiple summary notes share the same url and promptId: " + paths
+        )
+    if matches:
+        return matches[0]
+
+    for prefix_length in PROMPT_ID_FILENAME_PREFIX_LENGTHS:
+        candidate = summary_directory / build_summary_filename(
+            source_path.name,
+            prompt_id,
+            prompt_id_prefix_length=prefix_length,
+        )
+        if not candidate.exists():
+            return candidate
+    raise FileExistsError(
+        "summary filename collision: all supported prompt ID prefixes are in use"
+    )
+
+
 def build_summary(
     source_path: Path,
     summary_root: Path,
@@ -120,10 +170,11 @@ def build_summary(
         raise ValueError("source validation failed: " + "; ".join(source_errors))
     video = _video_from_source(source_path)
     prompt = provider.prompt
-    target = (
-        summary_root
-        / source_path.parent.name
-        / build_summary_filename(source_path.name, prompt.prompt_id)
+    target = _summary_target(
+        source_path,
+        summary_root,
+        video.canonical_url,
+        prompt.prompt_id,
     )
     existing_metadata: dict[str, Any] | None = None
     previous_prompt_version: str | None = None
@@ -134,8 +185,7 @@ def build_summary(
             existing_metadata.get("url") != video.canonical_url
             or str(existing_metadata.get("promptId")) != prompt.prompt_id
         ):
-            if not overwrite:
-                raise FileExistsError(f"summary collision: {target}")
+            raise FileExistsError(f"summary collision: {target}")
         else:
             previous_prompt_version = str(existing_metadata.get("promptVersion") or "")
             version_changed = previous_prompt_version != prompt.version

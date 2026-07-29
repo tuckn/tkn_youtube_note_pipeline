@@ -257,7 +257,13 @@ guardrail, and structured JSON output contract.
 Prompt identity controls summary identity:
 
 - A different prompt `id` creates a separate summary file for the same source.
-  Its filename contains the complete prompt UUID.
+  Its filename normally uses the first eight UUID hexadecimal characters, for
+  example `_70a1a332.md`; the complete UUID remains authoritative in
+  Frontmatter. If two IDs share that prefix, the filename prefix is extended
+  only as far as needed.
+- Existing summaries are found by matching Frontmatter `url` and `promptId`,
+  not by filename. Existing complete-UUID names and manual renames therefore
+  remain valid and are reused without creating a duplicate.
 - A different `version` with the same `id` regenerates and updates that prompt's
   existing summary automatically. The summary keeps its `noteId` and `date`,
   receives a new `updated`, and returns to `reviewStatus: unreviewed`.

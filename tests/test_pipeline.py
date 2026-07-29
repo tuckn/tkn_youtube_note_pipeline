@@ -237,21 +237,86 @@ def test_different_prompt_id_creates_a_separate_summary(tmp_path: Path) -> None:
     first = build_summary(
         source.path,
         tmp_path / "summary",
-        FakeProvider(prompt_id="00000000-0000-4000-8000-000000000011"),
+        FakeProvider(prompt_id="11111111-0000-4000-8000-000000000011"),
     )
     second = build_summary(
         source.path,
         tmp_path / "summary",
-        FakeProvider(prompt_id="00000000-0000-4000-8000-000000000012"),
+        FakeProvider(prompt_id="22222222-0000-4000-8000-000000000012"),
     )
 
     assert first.path != second.path
     assert first.path.is_file()
     assert second.path.is_file()
-    assert "00000000-0000-4000-8000-000000000011" in first.path.name
-    assert "00000000-0000-4000-8000-000000000012" in second.path.name
+    assert first.path.name.endswith("_11111111.md")
+    assert second.path.name.endswith("_22222222.md")
     assert validate_summary(first.path, tmp_path / "source") == []
     assert validate_summary(second.path, tmp_path / "source") == []
+
+
+def test_prompt_id_filename_prefix_extends_only_on_collision(tmp_path: Path) -> None:
+    manifest = import_raw(
+        FIXTURES / "metadata.info.json",
+        FIXTURES / "captions.ja.json3",
+        tmp_path / "raw",
+    )
+    source = build_source(manifest, tmp_path / "source")
+    first_id = "70a1a332-fa68-4a6d-9499-d703a17ced3e"
+    second_id = "70a1a332-aa68-4a6d-9499-d703a17ced3e"
+
+    first = build_summary(
+        source.path,
+        tmp_path / "summary",
+        FakeProvider(prompt_id=first_id),
+    )
+    second = build_summary(
+        source.path,
+        tmp_path / "summary",
+        FakeProvider(prompt_id=second_id),
+    )
+
+    assert first.path.name.endswith("_70a1a332.md")
+    assert second.path.name.endswith("_70a1a332aa68.md")
+    first_metadata, _ = split_note(first.path.read_text(encoding="utf-8"))
+    second_metadata, _ = split_note(second.path.read_text(encoding="utf-8"))
+    assert first_metadata["promptId"] == first_id
+    assert second_metadata["promptId"] == second_id
+
+
+def test_existing_summary_is_found_by_frontmatter_after_rename(tmp_path: Path) -> None:
+    manifest = import_raw(
+        FIXTURES / "metadata.info.json",
+        FIXTURES / "captions.ja.json3",
+        tmp_path / "raw",
+    )
+    source = build_source(manifest, tmp_path / "source")
+    generated = build_summary(source.path, tmp_path / "summary", FakeProvider())
+    renamed_path = generated.path.with_name("manually-renamed-summary.md")
+    generated.path.rename(renamed_path)
+
+    existing = build_summary(source.path, tmp_path / "summary", FakeProvider())
+
+    assert existing.status == "unchanged"
+    assert existing.path == renamed_path
+    assert validate_summary(renamed_path, tmp_path / "source") == []
+
+
+def test_duplicate_summary_frontmatter_identity_is_rejected(tmp_path: Path) -> None:
+    manifest = import_raw(
+        FIXTURES / "metadata.info.json",
+        FIXTURES / "captions.ja.json3",
+        tmp_path / "raw",
+    )
+    source = build_source(manifest, tmp_path / "source")
+    generated = build_summary(source.path, tmp_path / "summary", FakeProvider())
+    duplicate = generated.path.with_name("duplicate-summary.md")
+    duplicate.write_text(generated.path.read_text(encoding="utf-8"), encoding="utf-8")
+
+    with pytest.raises(
+        FileExistsError,
+        match="multiple summary notes share the same url and promptId",
+    ):
+        build_summary(source.path, tmp_path / "summary", FakeProvider())
 
 
 def test_prompt_version_change_updates_same_summary_and_preserves_note_identity(

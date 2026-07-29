@@ -12,7 +12,6 @@ from youtube_note_pipeline.io import sha256_file
 from youtube_note_pipeline.models import RawCaptureManifest
 from youtube_note_pipeline.naming import (
     build_filename,
-    build_summary_filename,
     file_uri_to_path,
 )
 from youtube_note_pipeline.notes import (
@@ -301,18 +300,6 @@ def validate_summary(path: Path, source_root: Path | None = None) -> list[str]:
         if is_legacy:
             if source_path.name != path.name:
                 errors.append("legacy source and summary must use the same filename")
-        else:
-            try:
-                expected_name = build_summary_filename(
-                    source_path.name,
-                    str(metadata.get("promptId")),
-                )
-                if path.name != expected_name:
-                    errors.append(
-                        "summary filename must include its full promptId"
-                    )
-            except ValueError as exc:
-                errors.append(str(exc))
         source_metadata, _ = split_note(source_path.read_text(encoding="utf-8"))
         if source_metadata.get("summary") is not None:
             errors.append("source note must not contain reverse summary provenance")

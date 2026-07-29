@@ -147,15 +147,25 @@ def test_filename_is_android_safe() -> None:
     assert not any(character in filename for character in '<>:"/\\|?*')
 
 
-def test_summary_filename_contains_full_prompt_id_and_stays_android_safe() -> None:
+def test_summary_filename_contains_short_prompt_id_and_stays_android_safe() -> None:
     prompt_id = "00000000-0000-4000-8000-000000000010"
     source_filename = "20260523_" + ("長い日本語タイトル" * 20) + ".md"
 
     filename = build_summary_filename(source_filename, prompt_id)
 
-    assert filename.endswith(f"__prompt-{prompt_id}.md")
+    assert filename.endswith("_00000000.md")
     assert len(filename.encode("utf-8")) < 200
     assert not any(character in filename for character in '<>:"/\\|?*')
+
+
+def test_summary_filename_can_extend_prompt_id_prefix() -> None:
+    filename = build_summary_filename(
+        "20260523_Title.md",
+        "70a1a332-fa68-4a6d-9499-d703a17ced3e",
+        prompt_id_prefix_length=12,
+    )
+
+    assert filename == "20260523_Title_70a1a332fa68.md"
 
 
 def test_file_uri_roundtrip(tmp_path: Path) -> None:
