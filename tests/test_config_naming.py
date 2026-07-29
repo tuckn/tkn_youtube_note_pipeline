@@ -13,6 +13,7 @@ from youtube_note_pipeline.config import (
 )
 from youtube_note_pipeline.naming import (
     build_filename,
+    build_summary_filename,
     file_uri_to_path,
     path_to_file_uri,
 )
@@ -142,6 +143,17 @@ def test_filename_is_android_safe() -> None:
     year, filename = build_filename("2026-05-23", "長い日本語タイトル" * 30)
     assert year == "2026"
     assert filename.startswith("20260523_")
+    assert len(filename.encode("utf-8")) < 200
+    assert not any(character in filename for character in '<>:"/\\|?*')
+
+
+def test_summary_filename_contains_full_prompt_id_and_stays_android_safe() -> None:
+    prompt_id = "00000000-0000-4000-8000-000000000010"
+    source_filename = "20260523_" + ("長い日本語タイトル" * 20) + ".md"
+
+    filename = build_summary_filename(source_filename, prompt_id)
+
+    assert filename.endswith(f"__prompt-{prompt_id}.md")
     assert len(filename.encode("utf-8")) < 200
     assert not any(character in filename for character in '<>:"/\\|?*')
 

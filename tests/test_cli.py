@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from youtube_note_pipeline.cli import _configure_logging, build_parser, main
+from youtube_note_pipeline.console_logging import SUCCESS, ColorFormatter
 
 
 def test_logging_defaults_to_info() -> None:
@@ -26,6 +27,29 @@ def test_quiet_and_verbose_logging_levels() -> None:
 def test_quiet_and_verbose_are_mutually_exclusive() -> None:
     with pytest.raises(SystemExit):
         build_parser().parse_args(["config", "show", "--quiet", "--verbose"])
+
+
+@pytest.mark.parametrize(
+    ("level", "name", "color"),
+    [
+        (SUCCESS, "SUCCESS", "\x1b[32m"),
+        (logging.ERROR, "ERROR", "\x1b[31m"),
+    ],
+)
+def test_console_formatter_colors_success_and_error(
+    level: int, name: str, color: str
+) -> None:
+    formatter = ColorFormatter("[%(levelname)s] %(message)s", use_color=True)
+    record = logging.LogRecord("test", level, __file__, 1, "message", (), None)
+
+    assert formatter.format(record) == f"{color}[{name}] message\x1b[0m"
+
+
+def test_console_formatter_keeps_redirected_output_plain() -> None:
+    formatter = ColorFormatter("[%(levelname)s] %(message)s", use_color=False)
+    record = logging.LogRecord("test", SUCCESS, __file__, 1, "message", (), None)
+
+    assert formatter.format(record) == "[SUCCESS] message"
 
 
 @pytest.mark.parametrize("option", ["--force", "--overwrite"])
@@ -58,8 +82,11 @@ def test_prompt_init_command(tmp_path: Path, monkeypatch, capsys) -> None:
     assert main(["prompt", "init", "my-summary.md", "--quiet"]) == 0
     payload = json.loads(capsys.readouterr().out)
     target = prompt_root / "my-summary.md"
-    assert payload == {"status": "created", "path": str(target)}
-    assert target.read_text(encoding="utf-8").startswith("# Default YouTube summary instructions")
+    assert payload["status"] == "created"
+    assert payload["path"] == str(target)
+    assert payload["prompt_version"] == "1.0"
+    assert len(payload["prompt_id"]) == 36
+    assert target.read_text(encoding="utf-8").startswith("---\ntype: prompt\n")
 
     assert main(["prompt", "init", "my-summary.md", "--quiet"]) == 1
     assert "refusing to overwrite" in capsys.readouterr().err
@@ -69,7 +96,13 @@ def test_config_show_reports_prompt_provenance(
     tmp_path: Path, monkeypatch, capsys
 ) -> None:
     custom = tmp_path / "custom.md"
-    custom.write_text("# Custom\nSummarize decisions.", encoding="utf-8")
+    custom.write_text(
+        "---\ntype: prompt\n"
+        "id: 00000000-0000-4000-8000-000000000003\n"
+        'version: "3.0"\n---\n\n'
+        "# Custom\nSummarize decisions.",
+        encoding="utf-8",
+    )
     monkeypatch.setattr(
         "youtube_note_pipeline.config.global_config_path",
         lambda: tmp_path / "missing-global.yaml",
@@ -92,6 +125,8 @@ def test_config_show_reports_prompt_provenance(
     assert prompt["configured"] == str(custom)
     assert prompt["mode"] == "custom"
     assert prompt["source"] == str(custom)
+    assert prompt["id"] == "00000000-0000-4000-8000-000000000003"
+    assert prompt["version"] == "3.0"
     assert len(prompt["sha256"]) == 64
 
 

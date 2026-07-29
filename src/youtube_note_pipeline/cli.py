@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from youtube_note_pipeline.config import public_config, resolve_config
+from youtube_note_pipeline.console_logging import ColorFormatter, log_success, supports_color
 from youtube_note_pipeline.pipeline import (
     build_source,
     build_summary,
@@ -65,10 +66,16 @@ def _verbosity(parser: argparse.ArgumentParser) -> None:
 
 def _configure_logging(args: argparse.Namespace) -> None:
     level = logging.DEBUG if args.verbose else logging.ERROR if args.quiet else logging.INFO
+    handler = logging.StreamHandler(sys.stderr)
+    handler.setFormatter(
+        ColorFormatter(
+            "[%(levelname)s] %(message)s",
+            use_color=supports_color(sys.stderr),
+        )
+    )
     logging.basicConfig(
         level=level,
-        format="[%(levelname)s] %(message)s",
-        stream=sys.stderr,
+        handlers=[handler],
         force=True,
     )
 
@@ -123,7 +130,7 @@ def build_parser() -> argparse.ArgumentParser:
     prompt_subparsers = prompt_parser.add_subparsers(dest="prompt_command", required=True)
     prompt_init = prompt_subparsers.add_parser(
         "init",
-        help="copy the built-in summary prompt to the user prompts directory",
+        help="create a uniquely identified prompt from the built-in instructions",
     )
     prompt_init.add_argument("name", nargs="?", default="summary.md")
     _verbosity(prompt_init)
@@ -161,7 +168,18 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "prompt":
             logger.info("Initializing user summary prompt: %s", args.name)
             path = initialize_user_prompt(args.name)
-            _print_result(path, "created")
+            prompt = load_summary_prompt(path)
+            print(
+                json.dumps(
+                    {
+                        "status": "created",
+                        "path": str(path),
+                        "prompt_id": prompt.prompt_id,
+                        "prompt_version": prompt.version,
+                    },
+                    ensure_ascii=False,
+                )
+            )
             return 0
         resolved = _resolved(args)
         config = resolved.config
@@ -174,6 +192,8 @@ def main(argv: list[str] | None = None) -> int:
                 "configured": values["summary_prompt"],
                 "mode": prompt.mode,
                 "source": prompt.source,
+                "id": prompt.prompt_id,
+                "version": prompt.version,
                 "sha256": prompt.sha256,
             }
             print(
@@ -233,7 +253,7 @@ def main(argv: list[str] | None = None) -> int:
             if errors:
                 logger.error("Validation failed for %s (%s)", args.path, kind)
             else:
-                logger.info("Validation succeeded for %s (%s)", args.path, kind)
+                log_success(logger, "Validation succeeded for %s (%s)", args.path, kind)
             return 1 if errors else 0
     except (OSError, ValueError, RuntimeError) as exc:
         logger.error("%s", exc)

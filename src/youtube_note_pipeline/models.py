@@ -85,5 +85,11 @@ class SummaryDocument(StrictModel):
     summary: str
     structuring: list[SummarySection]
     key_points: list[KeyPoint]
-    technical_terms: list[str]
+    technical_terms: list[str] = Field(
+        description=(
+            "Important terms formatted as Markdown strings in the form "
+            "'**term**: one or two sentences explaining the term's meaning "
+            "and role in this video'; bare terms are not allowed"
+        )
+    )
     conclusion: str

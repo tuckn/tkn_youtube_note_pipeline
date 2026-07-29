@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import uuid
 from datetime import date, datetime
 from pathlib import Path
 from urllib.parse import unquote, urlparse
@@ -57,6 +58,25 @@ def build_filename(published: str, title: str, limit: int = 200) -> tuple[str, s
     if not shortened or len(filename.encode("utf-8")) >= limit:
         raise ValueError(f"filename must remain below {limit} UTF-8 bytes")
     return str(published_date.year), filename
+
+
+def build_summary_filename(source_filename: str, prompt_id: str, limit: int = 200) -> str:
+    if not source_filename.lower().endswith(".md"):
+        raise ValueError("source filename must use the .md extension")
+    normalized_prompt_id = str(uuid.UUID(prompt_id))
+    suffix = f"__prompt-{normalized_prompt_id}.md"
+    budget = limit - len(suffix.encode("utf-8"))
+    stem = source_filename[:-3]
+    shortened = ""
+    for character in stem:
+        if len((shortened + character).encode("utf-8")) > budget:
+            break
+        shortened += character
+    shortened = shortened.rstrip(" .")
+    filename = f"{shortened}{suffix}"
+    if not shortened or len(filename.encode("utf-8")) >= limit:
+        raise ValueError(f"summary filename must remain below {limit} UTF-8 bytes")
+    return filename
 
 
 def path_to_file_uri(path: Path) -> str:

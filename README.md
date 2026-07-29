@@ -113,9 +113,11 @@ youtube-notes build-summary path/to/source-note.md --summary-prompt my-summary.m
 ```
 
 This sends the source transcript to the configured structured-output provider
-(Codex in version 1), creates the source-faithful Japanese summary note, and
-updates the source note description from `## 1. Summary`. It validates both
-notes and does not add semantic classification or ontology links.
+(Codex in version 1) and creates a source-faithful Japanese summary note. It
+validates both notes and does not add semantic classification or ontology links.
+Summary schema 2.0 does not copy one summary's description back to the shared
+source note, because one source can now have summaries made with multiple
+prompts.
 
 Initialize an editable copy of the built-in summary instructions:
 
@@ -126,9 +128,10 @@ youtube-notes prompt init my-summary.md
 
 This creates `summary.md`, or the supplied `.md` filename, below
 `~/.tkn/youtube_note_pipeline/prompts/`. It prints the created path as JSON and
-does not modify `config.yaml`. It refuses to overwrite an existing file. After
-editing the file, set `summary_prompt: my-summary.md` in a configuration file or
-pass `--summary-prompt my-summary.md` to a generating command.
+does not modify `config.yaml`. It refuses to overwrite an existing file and
+gives every new prompt a unique UUID with initial version `"1.0"`. After editing
+the file, set `summary_prompt: my-summary.md` in a configuration file or pass
+`--summary-prompt my-summary.md` to a generating command.
 
 Validate one pipeline artifact:
 
@@ -148,8 +151,8 @@ youtube-notes config show
 
 This prints the merged non-secret settings and the configuration sources that
 were actually loaded. For the summary prompt, it also validates the effective
-Markdown and reports its built-in/custom mode, resolved source, and SHA-256. It
-does not acquire or generate any content.
+Markdown and reports its built-in/custom mode, ID, document version, resolved
+source, and SHA-256. It does not acquire or generate any content.
 
 Version 1 accepts one video URL per invocation and rejects playlist and channel
 URLs. By default, durable output is written below
@@ -164,8 +167,8 @@ the command includes the summary stage. `acquire`, `import-raw`, `build-source`,
 Commands show progress logs on standard error by default and keep the final JSON
 result on standard output. This follows common CLI behavior: people can see
 progress interactively, while scripts can still capture or pipe the JSON result.
-The implementation uses Python's standard `logging` module and adds no logging
-dependency.
+The implementation adds a `SUCCESS` level to Python's standard `logging` module
+and adds no logging dependency.
 
 ```console
 youtube-notes ingest "https://www.youtube.com/watch?v=VIDEO_ID"
@@ -173,9 +176,15 @@ youtube-notes ingest "https://www.youtube.com/watch?v=VIDEO_ID" --quiet
 youtube-notes ingest "https://www.youtube.com/watch?v=VIDEO_ID" --verbose
 ```
 
-- Default: show `[INFO]`, `[WARNING]`, and `[ERROR]` messages.
+- Default: show `[INFO]`, `[SUCCESS]`, `[WARNING]`, and `[ERROR]` messages.
 - `-q` / `--quiet`: suppress progress logs and show errors only.
 - `-v` / `--verbose`: include `[DEBUG]` diagnostics.
+
+In an interactive terminal, successful outcome lines including `[SUCCESS]` are
+green, while `[ERROR]` and `[CRITICAL]` lines are red. This uses ANSI terminal
+colors and is not specific to PowerShell. Redirected or piped logs stay
+uncolored automatically, and the `NO_COLOR` environment variable also disables
+color.
 
 ## Configuration
 
@@ -222,7 +231,20 @@ Ordinary relative output paths are resolved from the current working directory.
 - A prompt elsewhere must use an absolute path; `~` home expansion is accepted.
 - Nested relative values such as `prompts/my-summary.md` are rejected.
 
-The file must be a non-empty UTF-8 `.md` file. A missing or invalid custom
+The file must be a non-empty UTF-8 `.md` file with this required Frontmatter:
+
+```yaml
+---
+type: prompt
+id: 00000000-0000-4000-8000-000000000001
+version: "1.0"
+---
+```
+
+`id` must be a UUID and remains stable for the lifetime of one prompt. Increment
+the quoted `version` when changing that prompt's instructions. Although a
+correctly formed file can be created manually, `youtube-notes prompt init` is
+recommended because it generates a unique ID. A missing or invalid custom
 prompt stops summary generation instead of silently using the built-in prompt.
 The same resolution applies to `--summary-prompt`, which has the highest normal
 CLI precedence. Do not commit private machine paths or credentials to a public
@@ -230,9 +252,18 @@ repository.
 
 Custom Markdown replaces only the human-editable summary instructions. The
 pipeline always appends the title, URL, transcript, transcript-as-untrusted-data
-guardrail, and structured JSON output contract. Changing a prompt does not
-overwrite an existing summary automatically: use `build-summary --overwrite` or
-`ingest --force` when intentional regeneration is required.
+guardrail, and structured JSON output contract.
+
+Prompt identity controls summary identity:
+
+- A different prompt `id` creates a separate summary file for the same source.
+  Its filename contains the complete prompt UUID.
+- A different `version` with the same `id` regenerates and updates that prompt's
+  existing summary automatically. The summary keeps its `noteId` and `date`,
+  receives a new `updated`, and returns to `reviewStatus: unreviewed`.
+- The same `id` and `version` remains idempotent and returns `unchanged`.
+- `--overwrite` / `--force` remains the explicit way to regenerate without a
+  prompt version change.
 
 The built-in instructions require source attribution, prohibit unsupported
 inference and external knowledge, organize the whole video by topic from
@@ -272,9 +303,8 @@ are durable user data. User-edited prompt Markdown is a configuration asset kept
 in `prompts/`. Run reports are persistent application state. Disposable cache
 data is stored below `~/.cache/youtube_note_pipeline/`.
 
-Each generated summary stage records the application-managed prompt format
-version, prompt source, and prompt SHA-256 in its run report. Summary note
-Frontmatter is unchanged.
+Each generated summary stage records prompt ID, document version, application
+envelope version, source, and SHA-256 in its run report.
 
 Provider-only temporary files use Python's platform temporary directory
 resolution (`%TMP%` on Windows and the standard temporary directory on
@@ -313,13 +343,15 @@ The manifest records schema version, hashes, selected caption track, tool
 version, canonical URL, and success or failure. A failed caption acquisition
 does not produce a source or summary note.
 
-Generated source and summary notes use Frontmatter `schemaVersion: "1.0"`.
-Both notes store the same `cover`. The source description is derived from
-`## 1. Summary`, while the summary description is derived from
+Generated source notes remain on Frontmatter `schemaVersion: "1.0"`. New summary
+notes use `schemaVersion: "2.0"` and include `promptId` and `promptVersion`.
+Legacy summary schema 1.0 remains valid for existing notes. Both notes store the
+same `cover`. A schema 2.0 summary description is derived from
 `## 5. Conclusion`; long descriptions are compacted to a bounded single-line
-value. A generated summary starts with `reviewStatus: unreviewed`. Subsequent
-validation accepts the review workflow states `unreviewed`, `pending`,
-`reviewing`, `accepted`, `needs-revision`, and `rejected`.
+value. Its shared source description is not modified. A generated summary
+starts with `reviewStatus: unreviewed`. Subsequent validation accepts the review
+workflow states `unreviewed`, `pending`, `reviewing`, `accepted`,
+`needs-revision`, and `rejected`.
 
 ## Development
 

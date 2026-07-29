@@ -1,3 +1,9 @@
+---
+type: prompt
+id: 70a1a332-fa68-4a6d-9499-d703a17ced3e
+version: "1.0"
+---
+
 # Default YouTube summary instructions
 
 Create a source-faithful Japanese summary that represents the full supplied
@@ -43,8 +49,12 @@ claims, reasoning, concrete examples, and conclusion without watching it.
 - `key_points`: the most important claims or examples. Add a timestamp only
   when that timestamp is explicitly present in the transcript and actually
   supports the point.
-- `technical_terms`: include only terms that matter to understanding the video,
-  with explanations supported by the transcript.
+- `technical_terms`: include only terms that matter to understanding the video.
+  Never output a bare term. Every list item must be one self-contained Markdown
+  string in the form `**用語**: 動画内での意味・役割を説明する1〜2文`.
+  Explain the term in the context in which the video uses it, using only
+  information supported by the transcript. Do not substitute a generic
+  dictionary definition or external knowledge.
 - `conclusion`: state the video's final conclusion or practical implication
   without adding advice that the speaker did not provide.
 

@@ -7,6 +7,8 @@ import pytest
 from youtube_note_pipeline.models import SummaryRequest, VideoSource
 from youtube_note_pipeline.providers.codex import CodexProvider
 
+CUSTOM_PROMPT_ID = "00000000-0000-4000-8000-000000000002"
+
 
 def request() -> SummaryRequest:
     return SummaryRequest(
@@ -53,6 +55,9 @@ def test_codex_structured_output(monkeypatch) -> None:
     assert result.generator == "Codex (gpt-test)"
     assert result.document.summary == "要約"
     assert result.prompt_source == "package:youtube_note_pipeline/prompts/default-summary.md"
+    assert result.prompt_id == "70a1a332-fa68-4a6d-9499-d703a17ced3e"
+    assert result.prompt_version == "1.0"
+    assert result.prompt_envelope_version == "test-v1"
     assert result.prompt_sha256 is not None
 
 
@@ -62,6 +67,8 @@ def test_codex_schema_requires_nullable_and_empty_list_fields(monkeypatch) -> No
             return Mock(returncode=0, stdout="codex-cli 1.0", stderr="")
         schema = json.loads(Path(command[command.index("--output-schema") + 1]).read_text())
         assert set(schema["required"]) == set(schema["properties"])
+        technical_terms = schema["properties"]["technical_terms"]
+        assert "bare terms are not allowed" in technical_terms["description"]
         key_point = schema["$defs"]["KeyPoint"]
         assert set(key_point["required"]) == set(key_point["properties"])
         output = Path(command[command.index("--output-last-message") + 1])
@@ -100,7 +107,13 @@ def test_codex_uses_custom_prompt_and_preserves_application_envelope(
     tmp_path: Path, monkeypatch
 ) -> None:
     custom = tmp_path / "custom.md"
-    custom.write_text("# Custom\nFocus on implementation decisions.", encoding="utf-8")
+    custom.write_text(
+        "---\ntype: prompt\n"
+        f"id: {CUSTOM_PROMPT_ID}\n"
+        'version: "2.1"\n---\n\n'
+        "# Custom\nFocus on implementation decisions.",
+        encoding="utf-8",
+    )
 
     def fake_run(command, **kwargs):
         if command[-1] == "--version":
@@ -118,6 +131,8 @@ def test_codex_uses_custom_prompt_and_preserves_application_envelope(
 
     monkeypatch.setattr("subprocess.run", fake_run)
     result = CodexProvider(summary_prompt=custom).generate(request())
+    assert result.prompt_id == CUSTOM_PROMPT_ID
+    assert result.prompt_version == "2.1"
     assert result.prompt_source == str(custom)
     assert result.prompt_sha256 is not None
 

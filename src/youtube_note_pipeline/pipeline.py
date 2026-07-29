@@ -13,18 +13,17 @@ from typing import Any
 
 from youtube_note_pipeline.captions import parse_json3, render_transcript, validate_transcript
 from youtube_note_pipeline.config import PipelineConfig
+from youtube_note_pipeline.console_logging import log_success
 from youtube_note_pipeline.io import atomic_write
 from youtube_note_pipeline.models import RawCaptureManifest, SummaryRequest, VideoSource
-from youtube_note_pipeline.naming import build_filename
+from youtube_note_pipeline.naming import build_filename, build_summary_filename
 from youtube_note_pipeline.notes import (
     render_source,
     render_summary,
     split_note,
-    summary_section,
     transcript_from_source,
-    update_source_description,
 )
-from youtube_note_pipeline.prompting import PROMPT_VERSION
+from youtube_note_pipeline.prompting import PROMPT_ENVELOPE_VERSION
 from youtube_note_pipeline.providers import CodexProvider, SummaryProvider
 from youtube_note_pipeline.raw import acquire, import_raw
 from youtube_note_pipeline.validation import (
@@ -103,18 +102,10 @@ def _video_from_source(path: Path) -> VideoSource:
     )
 
 
-def _sync_source_description(
-    source_path: Path,
-    summary: str,
-    updated: datetime,
-) -> str:
-    source_text = source_path.read_text(encoding="utf-8")
-    revised = update_source_description(source_text, summary, updated)
-    status = atomic_write(source_path, revised, overwrite=True)
-    errors = validate_source(source_path)
-    if errors:
-        raise ValueError("source metadata sync failed: " + "; ".join(errors))
-    return status
+def _frontmatter_datetime(value: Any) -> datetime:
+    if isinstance(value, datetime):
+        return value
+    return datetime.fromisoformat(str(value))
 
 
 def build_summary(
@@ -128,57 +119,87 @@ def build_summary(
     if source_errors:
         raise ValueError("source validation failed: " + "; ".join(source_errors))
     video = _video_from_source(source_path)
-    target = summary_root / source_path.parent.name / source_path.name
-    if target.exists() and not overwrite:
-        metadata, body = split_note(target.read_text(encoding="utf-8"))
-        if metadata.get("url") == video.canonical_url:
-            summary = summary_section(
-                body,
-                "## 1. Summary",
-                "## 2. Structuring (from abstract to concrete)",
-            )
-            source_status = _sync_source_description(
-                source_path,
-                summary,
-                datetime.fromisoformat(str(metadata["updated"])),
-            )
-            if not validate_summary(target):
-                logger.info("Summary note is already current: %s", target)
-                return StageResult(
+    prompt = provider.prompt
+    target = (
+        summary_root
+        / source_path.parent.name
+        / build_summary_filename(source_path.name, prompt.prompt_id)
+    )
+    existing_metadata: dict[str, Any] | None = None
+    previous_prompt_version: str | None = None
+    version_changed = False
+    if target.exists():
+        existing_metadata, _ = split_note(target.read_text(encoding="utf-8"))
+        if (
+            existing_metadata.get("url") != video.canonical_url
+            or str(existing_metadata.get("promptId")) != prompt.prompt_id
+        ):
+            if not overwrite:
+                raise FileExistsError(f"summary collision: {target}")
+        else:
+            previous_prompt_version = str(existing_metadata.get("promptVersion") or "")
+            version_changed = previous_prompt_version != prompt.version
+            if not overwrite and not version_changed:
+                if not validate_summary(target):
+                    logger.info("Summary note is already current: %s", target)
+                    return StageResult(
+                        target,
+                        "unchanged",
+                        {
+                            "validated": True,
+                            "prompt_id": prompt.prompt_id,
+                            "prompt_version": prompt.version,
+                        },
+                    )
+                raise FileExistsError(f"summary collision: {target}")
+            if version_changed:
+                logger.info(
+                    "Summary prompt version changed from %s to %s; updating %s",
+                    previous_prompt_version or "<missing>",
+                    prompt.version,
                     target,
-                    "unchanged",
-                    {"validated": True, "source_status": source_status},
                 )
-        raise FileExistsError(f"summary collision: {target}")
     transcript = transcript_from_source(source_path.read_text(encoding="utf-8"))
     input_hash = hashlib.sha256(transcript.encode("utf-8")).hexdigest()
     request = SummaryRequest(
         video=video,
         transcript=transcript,
-        prompt_version=PROMPT_VERSION,
+        prompt_version=PROMPT_ENVELOPE_VERSION,
         input_hash=input_hash,
     )
     logger.info("Generating structured summary with the configured provider")
     result = provider.generate(request)
+    if result.prompt_id != prompt.prompt_id or result.prompt_version != prompt.version:
+        raise RuntimeError("provider returned prompt provenance that does not match the request")
     logger.info(
         "Summary generation completed with %s",
         result.generator,
     )
     now = datetime.now().astimezone()
+    existing_note_id = (
+        str(existing_metadata.get("noteId")) if existing_metadata else None
+    )
+    existing_date = (
+        _frontmatter_datetime(existing_metadata["date"])
+        if existing_metadata and existing_metadata.get("date")
+        else None
+    )
     text = render_summary(
         video,
         source_path,
         result.document,
         now,
         result.generator,
+        prompt.prompt_id,
+        prompt.version,
+        note_id=existing_note_id,
+        created_at=existing_date,
     )
-    status = atomic_write(target, text, overwrite=overwrite)
-    source_status = _sync_source_description(source_path, result.document.summary, now)
+    status = atomic_write(target, text, overwrite=overwrite or version_changed)
     errors = validate_summary(target)
     if errors:
         raise ValueError("summary validation failed: " + "; ".join(errors))
     logger.info("Summary note %s: %s", status, target)
-    logger.info("Source description %s: %s", source_status, source_path)
     return StageResult(
         target,
         status,
@@ -187,11 +208,13 @@ def build_summary(
             "provider": result.provider,
             "model": result.model,
             "provider_version": result.provider_version,
-            "prompt_version": result.prompt_version or PROMPT_VERSION,
+            "prompt_id": result.prompt_id,
+            "prompt_version": result.prompt_version,
+            "prompt_envelope_version": result.prompt_envelope_version,
             "prompt_source": result.prompt_source,
             "prompt_sha256": result.prompt_sha256,
+            "previous_prompt_version": previous_prompt_version,
             "input_hash": input_hash,
-            "source_status": source_status,
         },
     )
 
@@ -280,7 +303,7 @@ def ingest(
         report = write_report(config, "ingest", stages, str(exc))
         raise RuntimeError(f"{exc}; report={report}") from exc
     report = write_report(config, "ingest", stages)
-    logger.info("Ingest completed successfully")
+    log_success(logger, "Ingest completed successfully")
     logger.info("Run report: %s", report)
     return stages, report
 

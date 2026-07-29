@@ -20,7 +20,8 @@ from youtube_note_pipeline.models import (
 )
 from youtube_note_pipeline.naming import path_to_file_uri
 
-NOTE_SCHEMA_VERSION = "1.0"
+SOURCE_NOTE_SCHEMA_VERSION = "1.0"
+SUMMARY_NOTE_SCHEMA_VERSION = "2.0"
 DESCRIPTION_MAX_CHARS = 240
 
 
@@ -123,7 +124,7 @@ def render_source(
     frontmatter = [
         "---",
         "type: transcript",
-        f"schemaVersion: {yaml_quote(NOTE_SCHEMA_VERSION)}",
+        f"schemaVersion: {yaml_quote(SOURCE_NOTE_SCHEMA_VERSION)}",
         f"title: {yaml_quote(video.title)}",
         'description: ""',
         f"cover: {_cover_url(video)}",
@@ -163,12 +164,16 @@ def render_summary(
     document: SummaryDocument,
     now: datetime,
     generator: str,
+    prompt_id: str,
+    prompt_version: str,
     note_id: str | None = None,
+    created_at: datetime | None = None,
 ) -> str:
+    created = created_at or now
     lines = [
         "---",
         "type: webClip",
-        f"schemaVersion: {yaml_quote(NOTE_SCHEMA_VERSION)}",
+        f"schemaVersion: {yaml_quote(SUMMARY_NOTE_SCHEMA_VERSION)}",
         f"title: {yaml_quote(video.title)}",
         f"description: {yaml_quote(compact_description(document.conclusion))}",
         f"cover: {_cover_url(video)}",
@@ -177,8 +182,10 @@ def render_summary(
         "cliptool: Codex",
         f"source: {yaml_quote(path_to_file_uri(source_path))}",
         f"generator: {yaml_quote(generator)}",
+        f"promptId: {prompt_id}",
+        f"promptVersion: {yaml_quote(prompt_version)}",
         "reviewStatus: unreviewed",
-        f"date: {now.isoformat(timespec='seconds')}",
+        f"date: {created.isoformat(timespec='seconds')}",
         f"updated: {now.isoformat(timespec='seconds')}",
         f"noteId: {note_id or uuid.uuid4()}",
         "---",

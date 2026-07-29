@@ -34,7 +34,7 @@ class CodexProvider:
     ) -> None:
         self.executable = executable
         self.model = model
-        self.summary_prompt = summary_prompt
+        self.prompt = load_summary_prompt(summary_prompt)
 
     def preflight(self) -> str:
         logger.debug("Running Codex preflight: %s --version", self.executable)
@@ -59,8 +59,7 @@ class CodexProvider:
         return version
 
     def generate(self, request: SummaryRequest) -> ProviderResult:
-        prompt_spec = load_summary_prompt(self.summary_prompt)
-        prompt = render_summary_prompt(prompt_spec, request)
+        prompt = render_summary_prompt(self.prompt, request)
         provider_version = self.preflight()
         schema = SummaryDocument.model_json_schema()
         with tempfile.TemporaryDirectory(prefix="youtube-notes-codex-") as temp:
@@ -116,7 +115,9 @@ class CodexProvider:
             model=effective_model,
             generator=generator,
             provider_version=provider_version,
-            prompt_version=request.prompt_version,
-            prompt_source=prompt_spec.source,
-            prompt_sha256=prompt_spec.sha256,
+            prompt_id=self.prompt.prompt_id,
+            prompt_version=self.prompt.version,
+            prompt_envelope_version=request.prompt_version,
+            prompt_source=self.prompt.source,
+            prompt_sha256=self.prompt.sha256,
         )

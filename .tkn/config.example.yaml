@@ -15,4 +15,6 @@ codex_executable: codex
 
 # null uses the built-in prompt. A filename is resolved below
 # ~/.tkn/youtube_note_pipeline/prompts/. Use an absolute path for other locations.
+# Custom prompt files require type: prompt, a UUID id, and a quoted version.
+# Use `youtube-notes prompt init` to create one with a unique id.
 summary_prompt: null

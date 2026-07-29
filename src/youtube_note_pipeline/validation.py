@@ -4,14 +4,20 @@ from __future__ import annotations
 
 import json
 import re
+import uuid
 from pathlib import Path
 
 from youtube_note_pipeline.captions import parse_json3, validate_transcript
 from youtube_note_pipeline.io import sha256_file
 from youtube_note_pipeline.models import RawCaptureManifest
-from youtube_note_pipeline.naming import build_filename, file_uri_to_path
+from youtube_note_pipeline.naming import (
+    build_filename,
+    build_summary_filename,
+    file_uri_to_path,
+)
 from youtube_note_pipeline.notes import (
-    NOTE_SCHEMA_VERSION,
+    SOURCE_NOTE_SCHEMA_VERSION,
+    SUMMARY_NOTE_SCHEMA_VERSION,
     compact_description,
     split_note,
     summary_section,
@@ -36,6 +42,23 @@ SOURCE_FRONTMATTER_ORDER = [
     "noteId",
 ]
 
+LEGACY_SUMMARY_FRONTMATTER_ORDER = [
+    "type",
+    "schemaVersion",
+    "title",
+    "description",
+    "cover",
+    "nouns",
+    "url",
+    "cliptool",
+    "source",
+    "generator",
+    "reviewStatus",
+    "date",
+    "updated",
+    "noteId",
+]
+
 SUMMARY_FRONTMATTER_ORDER = [
     "type",
     "schemaVersion",
@@ -47,6 +70,8 @@ SUMMARY_FRONTMATTER_ORDER = [
     "cliptool",
     "source",
     "generator",
+    "promptId",
+    "promptVersion",
     "reviewStatus",
     "date",
     "updated",
@@ -123,8 +148,8 @@ def validate_source(path: Path, require_transcript: bool = True) -> list[str]:
         return [str(exc)]
     if metadata.get("type") != "transcript":
         errors.append("type must be 'transcript'")
-    if str(metadata.get("schemaVersion")) != NOTE_SCHEMA_VERSION:
-        errors.append(f"schemaVersion must be {NOTE_SCHEMA_VERSION}")
+    if str(metadata.get("schemaVersion")) != SOURCE_NOTE_SCHEMA_VERSION:
+        errors.append(f"schemaVersion must be {SOURCE_NOTE_SCHEMA_VERSION}")
     if "description" not in metadata:
         errors.append("description must be present")
     for key in (
@@ -187,8 +212,10 @@ def validate_summary(path: Path, source_root: Path | None = None) -> list[str]:
         return [str(exc)]
     if metadata.get("type") != "webClip":
         errors.append("type must be 'webClip'")
-    if str(metadata.get("schemaVersion")) != NOTE_SCHEMA_VERSION:
-        errors.append(f"schemaVersion must be {NOTE_SCHEMA_VERSION}")
+    schema_version = str(metadata.get("schemaVersion"))
+    if schema_version not in ("1.0", SUMMARY_NOTE_SCHEMA_VERSION):
+        errors.append(f"schemaVersion must be 1.0 or {SUMMARY_NOTE_SCHEMA_VERSION}")
+    is_legacy = schema_version == "1.0"
     if metadata.get("reviewStatus") not in SUMMARY_REVIEW_STATUSES:
         allowed = ", ".join(SUMMARY_REVIEW_STATUSES)
         errors.append(f"reviewStatus must be one of: {allowed}")
@@ -207,6 +234,20 @@ def validate_summary(path: Path, source_root: Path | None = None) -> list[str]:
     ):
         if not metadata.get(key):
             errors.append(f"{key} must be non-empty")
+    if is_legacy:
+        if "promptId" in metadata or "promptVersion" in metadata:
+            errors.append("schemaVersion 1.0 must not contain prompt provenance")
+    else:
+        try:
+            normalized_prompt_id = str(uuid.UUID(str(metadata.get("promptId"))))
+            if str(metadata.get("promptId")) != normalized_prompt_id:
+                errors.append("promptId must use canonical lowercase UUID form")
+        except (ValueError, AttributeError):
+            errors.append("promptId must be a UUID")
+        if not isinstance(metadata.get("promptVersion"), str) or not str(
+            metadata.get("promptVersion")
+        ).strip():
+            errors.append("promptVersion must be a non-empty string")
     for key in (
         "linkStatus",
         "medium",
@@ -221,7 +262,10 @@ def validate_summary(path: Path, source_root: Path | None = None) -> list[str]:
             errors.append(f"{key} belongs on the source note, not the summary")
     if metadata.get("nouns") != []:
         errors.append("nouns must default to []")
-    errors.extend(_validate_frontmatter_order(text, SUMMARY_FRONTMATTER_ORDER, "summary"))
+    expected_order = (
+        LEGACY_SUMMARY_FRONTMATTER_ORDER if is_legacy else SUMMARY_FRONTMATTER_ORDER
+    )
+    errors.extend(_validate_frontmatter_order(text, expected_order, "summary"))
     if re.search(r"(?m)^## Transcript\s*$", body):
         errors.append("summary must not contain a Transcript section")
     headings = [
@@ -252,12 +296,29 @@ def validate_summary(path: Path, source_root: Path | None = None) -> list[str]:
         source_path = file_uri_to_path(str(metadata.get("source") or ""))
         if source_root:
             source_path.resolve(strict=True).relative_to(source_root.resolve(strict=True))
-        if source_path.parent.name != path.parent.name or source_path.name != path.name:
-            errors.append("source and summary must use the same year folder and filename")
+        if source_path.parent.name != path.parent.name:
+            errors.append("source and summary must use the same year folder")
+        if is_legacy:
+            if source_path.name != path.name:
+                errors.append("legacy source and summary must use the same filename")
+        else:
+            try:
+                expected_name = build_summary_filename(
+                    source_path.name,
+                    str(metadata.get("promptId")),
+                )
+                if path.name != expected_name:
+                    errors.append(
+                        "summary filename must include its full promptId"
+                    )
+            except ValueError as exc:
+                errors.append(str(exc))
         source_metadata, _ = split_note(source_path.read_text(encoding="utf-8"))
         if source_metadata.get("summary") is not None:
             errors.append("source note must not contain reverse summary provenance")
-        if source_metadata.get("description") != compact_description(summary_value):
+        if is_legacy and source_metadata.get("description") != compact_description(
+            summary_value
+        ):
             errors.append("source description must match the compacted Summary")
         if source_metadata.get("cover") != metadata.get("cover"):
             errors.append("source and summary cover must match")

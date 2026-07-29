@@ -105,9 +105,9 @@ youtube-notes build-summary path/to/source-note.md --summary-prompt my-summary.m
 ```
 
 sourceのTranscriptをconfigured structured-output provider（version 1ではCodex）へ渡し、
-sourceに忠実な日本語summaryノートを作ります。同時にsourceノートのdescriptionを
-`## 1. Summary`から更新し、両方のノートを検証します。semantic classificationや
-ontology linkは追加しません。
+sourceに忠実な日本語summaryノートを作り、両方のノートを検証します。semantic
+classificationやontology linkは追加しません。summary schema 2.0では、1つのsourceを
+複数promptのsummaryが共有できるよう、特定summaryのdescriptionをsourceへ同期しません。
 
 組み込みのsummary指示を編集用ファイルとして初期化します。
 
@@ -118,8 +118,9 @@ youtube-notes prompt init my-summary.md
 
 `summary.md`または指定した`.md`ファイル名を
 `~/.tkn/youtube_note_pipeline/prompts/`以下へ作成し、作成先をJSONで表示します。
-`config.yaml`は変更せず、既存ファイルも上書きしません。編集後はconfigに
-`summary_prompt: my-summary.md`を設定するか、生成コマンドへ
+`config.yaml`は変更せず、既存ファイルも上書きしません。各promptにはuniqueなUUIDと
+初期version `"1.0"`を設定します。編集後はconfigに`summary_prompt: my-summary.md`を
+設定するか、生成コマンドへ
 `--summary-prompt my-summary.md`を渡します。
 
 pipeline artifactを1件検証します。
@@ -138,8 +139,8 @@ youtube-notes config show
 ```
 
 merge後の非secret設定と、実際に読み込まれた設定sourceを表示します。
-summary promptについては、有効なMarkdownを検証し、built-in/customのmode、
-解決済みsource、SHA-256も表示します。contentの取得や生成は行いません。
+summary promptについては、有効なMarkdownを検証し、built-in/customのmode、ID、
+document version、解決済みsource、SHA-256も表示します。contentの取得や生成は行いません。
 
 version 1は1回の実行につき1本の動画URLだけを受け付け、playlist URLとchannel URLを
 拒否します。永続データの既定の出力先は`~/.tkn/youtube_note_pipeline/`以下です。
@@ -152,8 +153,8 @@ stageを含むため生成AIを使います。`acquire`、`import-raw`、`build-
 
 既定では、進捗ログをstandard errorへ、最終的なJSON resultをstandard outputへ
 出力します。interactiveな実行では進捗が見え、scriptからはJSONだけをcapture・pipe
-できる、一般的なCLIの挙動です。Python標準の`logging` moduleを使っているため、
-logging専用のdependencyは追加していません。
+できる、一般的なCLIの挙動です。Python標準の`logging` moduleに`SUCCESS` levelを
+追加しており、logging専用のdependencyは追加していません。
 
 ```console
 youtube-notes ingest "https://www.youtube.com/watch?v=VIDEO_ID"
@@ -161,9 +162,14 @@ youtube-notes ingest "https://www.youtube.com/watch?v=VIDEO_ID" --quiet
 youtube-notes ingest "https://www.youtube.com/watch?v=VIDEO_ID" --verbose
 ```
 
-- 既定: `[INFO]`、`[WARNING]`、`[ERROR]`を表示
+- 既定: `[INFO]`、`[SUCCESS]`、`[WARNING]`、`[ERROR]`を表示
 - `-q` / `--quiet`: 進捗を省略し、errorだけを表示
 - `-v` / `--verbose`: `[DEBUG]`の診断情報も表示
+
+interactive terminalでは`[SUCCESS]`を含む成功行を緑、`[ERROR]`と`[CRITICAL]`を
+赤で表示します。これはPowerShell固有の機能ではなくANSI terminal colorを使います。
+redirectまたはpipeされたログは自動的に無色になり、`NO_COLOR` environment variable
+でも色を無効化できます。
 
 ## 設定
 
@@ -209,15 +215,34 @@ summary_prompt: null
 - その他の場所はabsolute pathで指定し、`~`によるhome展開も許可
 - `prompts/my-summary.md`のような階層を含むrelative pathは拒否
 
-custom promptは、空でないUTF-8の`.md`ファイルである必要があります。missingまたは
-不正な場合、組み込みpromptへ黙ってfallbackせず、summary生成を停止します。
+custom promptは、空でないUTF-8の`.md`ファイルで、次のFrontmatterが必要です。
+
+```yaml
+---
+type: prompt
+id: 00000000-0000-4000-8000-000000000001
+version: "1.0"
+---
+```
+
+`id`はUUIDとし、1つのpromptの生存期間中は変更しません。指示を更新するときは、quoted
+stringの`version`を更新します。手作業でも作成できますが、unique IDを確実に発行する
+`youtube-notes prompt init`を推奨します。missingまたは不正な場合、組み込みpromptへ
+黙ってfallbackせず、summary生成を停止します。
 `--summary-prompt`にも同じ解決規則を適用し、通常のCLI優先順位で最優先になります。
 privateなmachine pathやcredentialをpublic repositoryへcommitしないでください。
 
 custom Markdownが置き換えるのは、人が編集できるsummary指示だけです。title、URL、
 Transcript、Transcriptを信頼できない入力dataとして扱うguardrail、structured JSONの
-出力契約はpipelineが必ず追加します。promptを変更しても既存summaryは自動上書きせず、
-意図的に再生成するときだけ`build-summary --overwrite`または`ingest --force`を使います。
+出力契約はpipelineが必ず追加します。
+
+prompt identityはsummary identityを次のように決定します。
+
+- 異なるprompt `id`は、同じsourceから完全なprompt UUIDをファイル名に含む別summaryを作成
+- 同じ`id`で`version`が異なる場合、同じsummaryを自動再生成し、`noteId`と`date`を保持、
+  `updated`を更新して`reviewStatus: unreviewed`へ戻す
+- 同じ`id`と`version`はidempotentに`unchanged`
+- versionを変えずに再生成する場合だけ、明示的な`--overwrite` / `--force`を使用
 
 組み込み指示は、主張の帰属、根拠のない推測と外部知識の禁止、動画全体を抽象から具体へ
 論点別に再構成すること、主題に不要な広告とCTAの除外、structured summaryの各fieldに
@@ -254,8 +279,8 @@ summaryノートは永続的なuser data、ユーザーが編集するprompt Mar
 置くconfig資産、run reportは永続的なapplication stateです。破棄可能なcache dataは
 `~/.cache/youtube_note_pipeline/`以下へ保存します。
 
-summary生成stageのrun reportには、application管理のprompt format version、
-prompt source、prompt SHA-256を記録します。summaryノートのFrontmatterは変更しません。
+summary生成stageのrun reportには、prompt ID、document version、application envelope
+version、prompt source、prompt SHA-256を記録します。
 
 providerだけが使用する一時ファイルには、Pythonがplatformごとに解決するtemp
 directory（Windowsでは`%TMP%`、Linuxでは標準temp directory）を使います。
@@ -290,12 +315,13 @@ Codexの実行ログが報告するeffective modelをbest-effortで検出しま�
 manifestはschema version、hash、選択したcaption track、tool version、canonical URL、
 成功・失敗を記録します。字幕取得に失敗した場合、source・summaryノートは作りません。
 
-生成するsource・summaryノートはFrontmatter `schemaVersion: "1.0"`を使用します。
-両方のノートに同じ`cover`を保存します。sourceのdescriptionは`## 1. Summary`、
-summaryのdescriptionは`## 5. Conclusion`から作成し、長い場合は一定長の1行へ
-区切ります。生成時のsummaryは`reviewStatus: unreviewed`で始まります。その後の
-検証ではreview workflowの状態として`unreviewed`、`pending`、`reviewing`、
-`accepted`、`needs-revision`、`rejected`を受け付けます。
+生成するsourceノートはFrontmatter `schemaVersion: "1.0"`を維持します。新しいsummaryは
+`schemaVersion: "2.0"`を使用し、`promptId`と`promptVersion`を含みます。既存summaryの
+schema 1.0も引き続き検証できます。両方のノートに同じ`cover`を保存します。schema 2.0
+summaryのdescriptionは`## 5. Conclusion`から作成し、長い場合は一定長の1行へ区切ります。
+共有sourceのdescriptionは変更しません。生成時のsummaryは`reviewStatus: unreviewed`で
+始まります。その後の検証ではreview workflowの状態として`unreviewed`、`pending`、
+`reviewing`、`accepted`、`needs-revision`、`rejected`を受け付けます。
 
 ## 開発
 
