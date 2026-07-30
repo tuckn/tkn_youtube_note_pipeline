@@ -104,7 +104,8 @@ def test_full_synthetic_pipeline_and_idempotency(tmp_path: Path) -> None:
     assert "\nsummary:" not in source_text
     assert 'source: "file:' in summary_text
     assert 'author: "Example Channel"' in source_text
-    assert "nouns: []" in summary_text
+    assert summary_metadata["type"] == "summary"
+    assert "nouns" not in summary_metadata
     assert (
         "- **pipeline**: 動画では、処理を複数の段階に分ける方法を指す。"
         in summary_text
@@ -112,12 +113,12 @@ def test_full_synthetic_pipeline_and_idempotency(tmp_path: Path) -> None:
     assert source_metadata["description"] == ""
     assert summary_metadata["description"] == "論点から結論までを段階的に整理する。"
     assert source_metadata["cover"] == summary_metadata["cover"]
-    assert summary_metadata["schemaVersion"] == "2.0"
+    assert summary_metadata["schemaVersion"] == "3.0"
     assert summary_metadata["promptId"] == DEFAULT_TEST_PROMPT_ID
     assert summary_metadata["promptVersion"] == "1.0"
     assert summary_metadata["cliptool"] == "Codex"
     assert summary_text.index("description:") < summary_text.index("cover:")
-    assert summary_text.index("nouns:") < summary_text.index("url:")
+    assert summary_text.index("cover:") < summary_text.index("url:")
     assert summary_text.index("url:") < summary_text.index("cliptool:")
     assert summary_text.index("cliptool:") < summary_text.index("source:")
     assert summary_text.index("source:") < summary_text.index("generator:")
@@ -367,7 +368,9 @@ def test_legacy_summary_schema_1_remains_valid(tmp_path: Path) -> None:
     generated = build_summary(source.path, tmp_path / "summary", FakeProvider())
     generated_text = generated.path.read_text(encoding="utf-8")
     legacy_text = (
-        generated_text.replace('schemaVersion: "2.0"', 'schemaVersion: "1.0"')
+        generated_text.replace("type: summary", "type: webClip")
+        .replace('schemaVersion: "3.0"', 'schemaVersion: "1.0"')
+        .replace("url:", "nouns: []\nurl:", 1)
         .replace(f"promptId: {DEFAULT_TEST_PROMPT_ID}\n", "")
         .replace('promptVersion: "1.0"\n', "")
     )
@@ -384,3 +387,52 @@ def test_legacy_summary_schema_1_remains_valid(tmp_path: Path) -> None:
     )
 
     assert validate_summary(legacy_path, tmp_path / "source") == []
+
+
+def test_existing_schema_2_summary_remains_valid_and_idempotent(tmp_path: Path) -> None:
+    manifest = import_raw(
+        FIXTURES / "metadata.info.json",
+        FIXTURES / "captions.ja.json3",
+        tmp_path / "raw",
+    )
+    source = build_source(manifest, tmp_path / "source")
+    generated = build_summary(source.path, tmp_path / "summary", FakeProvider())
+    schema_2_text = (
+        generated.path.read_text(encoding="utf-8")
+        .replace("type: summary", "type: webClip")
+        .replace('schemaVersion: "3.0"', 'schemaVersion: "2.0"')
+        .replace("url:", "nouns: []\nurl:", 1)
+    )
+    generated.path.write_text(schema_2_text, encoding="utf-8")
+
+    assert validate_summary(generated.path, tmp_path / "source") == []
+    assert build_summary(
+        source.path,
+        tmp_path / "summary",
+        FakeProvider(),
+    ).status == "unchanged"
+
+
+def test_current_summary_remains_valid_after_nouns_metadata_is_added(
+    tmp_path: Path,
+) -> None:
+    manifest = import_raw(
+        FIXTURES / "metadata.info.json",
+        FIXTURES / "captions.ja.json3",
+        tmp_path / "raw",
+    )
+    source = build_source(manifest, tmp_path / "source")
+    generated = build_summary(source.path, tmp_path / "summary", FakeProvider())
+    with_nouns = generated.path.read_text(encoding="utf-8").replace(
+        "url:",
+        'nouns:\n  - "[[Example concept]]"\nurl:',
+        1,
+    )
+    generated.path.write_text(with_nouns, encoding="utf-8")
+
+    assert validate_summary(generated.path, tmp_path / "source") == []
+    assert build_summary(
+        source.path,
+        tmp_path / "summary",
+        FakeProvider(),
+    ).status == "unchanged"

@@ -41,7 +41,7 @@ SOURCE_FRONTMATTER_ORDER = [
     "noteId",
 ]
 
-LEGACY_SUMMARY_FRONTMATTER_ORDER = [
+SUMMARY_FRONTMATTER_ORDER_V1 = [
     "type",
     "schemaVersion",
     "title",
@@ -58,13 +58,31 @@ LEGACY_SUMMARY_FRONTMATTER_ORDER = [
     "noteId",
 ]
 
-SUMMARY_FRONTMATTER_ORDER = [
+SUMMARY_FRONTMATTER_ORDER_V2 = [
     "type",
     "schemaVersion",
     "title",
     "description",
     "cover",
     "nouns",
+    "url",
+    "cliptool",
+    "source",
+    "generator",
+    "promptId",
+    "promptVersion",
+    "reviewStatus",
+    "date",
+    "updated",
+    "noteId",
+]
+
+SUMMARY_FRONTMATTER_ORDER = [
+    "type",
+    "schemaVersion",
+    "title",
+    "description",
+    "cover",
     "url",
     "cliptool",
     "source",
@@ -209,12 +227,16 @@ def validate_summary(path: Path, source_root: Path | None = None) -> list[str]:
         metadata, body = split_note(text)
     except (OSError, UnicodeError, ValueError) as exc:
         return [str(exc)]
-    if metadata.get("type") != "webClip":
-        errors.append("type must be 'webClip'")
     schema_version = str(metadata.get("schemaVersion"))
-    if schema_version not in ("1.0", SUMMARY_NOTE_SCHEMA_VERSION):
-        errors.append(f"schemaVersion must be 1.0 or {SUMMARY_NOTE_SCHEMA_VERSION}")
-    is_legacy = schema_version == "1.0"
+    supported_schema_versions = ("1.0", "2.0", SUMMARY_NOTE_SCHEMA_VERSION)
+    if schema_version not in supported_schema_versions:
+        allowed = ", ".join(supported_schema_versions)
+        errors.append(f"schemaVersion must be one of: {allowed}")
+    is_v1 = schema_version == "1.0"
+    is_prior_schema = schema_version in ("1.0", "2.0")
+    expected_type = "webClip" if is_prior_schema else "summary"
+    if metadata.get("type") != expected_type:
+        errors.append(f"type must be '{expected_type}' for schemaVersion {schema_version}")
     if metadata.get("reviewStatus") not in SUMMARY_REVIEW_STATUSES:
         allowed = ", ".join(SUMMARY_REVIEW_STATUSES)
         errors.append(f"reviewStatus must be one of: {allowed}")
@@ -233,7 +255,7 @@ def validate_summary(path: Path, source_root: Path | None = None) -> list[str]:
     ):
         if not metadata.get(key):
             errors.append(f"{key} must be non-empty")
-    if is_legacy:
+    if is_v1:
         if "promptId" in metadata or "promptVersion" in metadata:
             errors.append("schemaVersion 1.0 must not contain prompt provenance")
     else:
@@ -259,11 +281,15 @@ def validate_summary(path: Path, source_root: Path | None = None) -> list[str]:
     ):
         if key in metadata:
             errors.append(f"{key} belongs on the source note, not the summary")
-    if metadata.get("nouns") != []:
-        errors.append("nouns must default to []")
-    expected_order = (
-        LEGACY_SUMMARY_FRONTMATTER_ORDER if is_legacy else SUMMARY_FRONTMATTER_ORDER
-    )
+    if is_prior_schema:
+        if metadata.get("nouns") != []:
+            errors.append("nouns must default to [] for schemaVersion 1.0 or 2.0")
+    if is_v1:
+        expected_order = SUMMARY_FRONTMATTER_ORDER_V1
+    elif schema_version == "2.0":
+        expected_order = SUMMARY_FRONTMATTER_ORDER_V2
+    else:
+        expected_order = SUMMARY_FRONTMATTER_ORDER
     errors.extend(_validate_frontmatter_order(text, expected_order, "summary"))
     if re.search(r"(?m)^## Transcript\s*$", body):
         errors.append("summary must not contain a Transcript section")
@@ -297,13 +323,13 @@ def validate_summary(path: Path, source_root: Path | None = None) -> list[str]:
             source_path.resolve(strict=True).relative_to(source_root.resolve(strict=True))
         if source_path.parent.name != path.parent.name:
             errors.append("source and summary must use the same year folder")
-        if is_legacy:
+        if is_v1:
             if source_path.name != path.name:
                 errors.append("legacy source and summary must use the same filename")
         source_metadata, _ = split_note(source_path.read_text(encoding="utf-8"))
         if source_metadata.get("summary") is not None:
             errors.append("source note must not contain reverse summary provenance")
-        if is_legacy and source_metadata.get("description") != compact_description(
+        if is_v1 and source_metadata.get("description") != compact_description(
             summary_value
         ):
             errors.append("source description must match the compacted Summary")
@@ -329,6 +355,6 @@ def validate_path(path: Path, source_root: Path | None = None) -> tuple[str, lis
             return "note", [str(exc)]
         if metadata.get("type") == "transcript":
             return "source", validate_source(path)
-        if metadata.get("type") == "webClip":
+        if metadata.get("type") in ("webClip", "summary"):
             return "summary", validate_summary(path, source_root)
     return "unknown", ["cannot determine artifact type"]

@@ -320,9 +320,10 @@ manifestはschema version、hash、選択したcaption track、tool version、ca
 成功・失敗を記録します。字幕取得に失敗した場合、source・summaryノートは作りません。
 
 生成するsourceノートはFrontmatter `schemaVersion: "1.0"`を維持します。新しいsummaryは
-`schemaVersion: "2.0"`を使用し、`promptId`と`promptVersion`を含みます。既存summaryの
-schema 1.0も引き続き検証できます。両方のノートに同じ`cover`を保存します。schema 2.0
-summaryのdescriptionは`## 5. Conclusion`から作成し、長い場合は一定長の1行へ区切ります。
+`type: summary`と`schemaVersion: "3.0"`を使用し、`promptId`と`promptVersion`を含みます。
+`nouns`は登録せず、別のCLIによる付与に委ねます。既存summaryのschema 1.0と2.0も
+引き続き検証できます。両方のノートに同じ`cover`を保存します。現行summaryのdescriptionは
+`## 5. Conclusion`から作成し、長い場合は一定長の1行へ区切ります。
 共有sourceのdescriptionは変更しません。生成時のsummaryは`reviewStatus: unreviewed`で
 始まります。その後の検証ではreview workflowの状態として`unreviewed`、`pending`、
 `reviewing`、`accepted`、`needs-revision`、`rejected`を受け付けます。

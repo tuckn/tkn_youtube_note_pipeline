@@ -350,9 +350,10 @@ version, canonical URL, and success or failure. A failed caption acquisition
 does not produce a source or summary note.
 
 Generated source notes remain on Frontmatter `schemaVersion: "1.0"`. New summary
-notes use `schemaVersion: "2.0"` and include `promptId` and `promptVersion`.
-Legacy summary schema 1.0 remains valid for existing notes. Both notes store the
-same `cover`. A schema 2.0 summary description is derived from
+notes use `type: summary` and `schemaVersion: "3.0"`, include `promptId` and
+`promptVersion`, and omit `nouns` so a separate CLI can assign that metadata.
+Legacy summary schemas 1.0 and 2.0 remain valid for existing notes. Both notes
+store the same `cover`. A current summary description is derived from
 `## 5. Conclusion`; long descriptions are compacted to a bounded single-line
 value. Its shared source description is not modified. A generated summary
 starts with `reviewStatus: unreviewed`. Subsequent validation accepts the review

@@ -21,7 +21,7 @@ from youtube_note_pipeline.models import (
 from youtube_note_pipeline.naming import path_to_file_uri
 
 SOURCE_NOTE_SCHEMA_VERSION = "1.0"
-SUMMARY_NOTE_SCHEMA_VERSION = "2.0"
+SUMMARY_NOTE_SCHEMA_VERSION = "3.0"
 DESCRIPTION_MAX_CHARS = 240
 
 
@@ -172,12 +172,11 @@ def render_summary(
     created = created_at or now
     lines = [
         "---",
-        "type: webClip",
+        "type: summary",
         f"schemaVersion: {yaml_quote(SUMMARY_NOTE_SCHEMA_VERSION)}",
         f"title: {yaml_quote(video.title)}",
         f"description: {yaml_quote(compact_description(document.conclusion))}",
         f"cover: {_cover_url(video)}",
-        "nouns: []",
         f"url: {video.canonical_url}",
         "cliptool: Codex",
         f"source: {yaml_quote(path_to_file_uri(source_path))}",
