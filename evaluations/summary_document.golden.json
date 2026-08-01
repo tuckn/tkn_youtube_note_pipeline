@@ -6,7 +6,8 @@
       "heading": "Central idea",
       "details": [
         "A supporting detail."
-      ]
+      ],
+      "subsections": []
     }
   ],
   "key_points": [
@@ -16,7 +17,7 @@
     }
   ],
   "technical_terms": [
-    "term: definition grounded in the source"
+    "**term**: A neutral definition grounded in the source."
   ],
   "conclusion": "The conclusion stated by the source."
 }

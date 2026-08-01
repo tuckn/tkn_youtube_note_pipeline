@@ -228,7 +228,7 @@ def validate_summary(path: Path, source_root: Path | None = None) -> list[str]:
     except (OSError, UnicodeError, ValueError) as exc:
         return [str(exc)]
     schema_version = str(metadata.get("schemaVersion"))
-    supported_schema_versions = ("1.0", "2.0", SUMMARY_NOTE_SCHEMA_VERSION)
+    supported_schema_versions = ("1.0", "2.0", "3.0", SUMMARY_NOTE_SCHEMA_VERSION)
     if schema_version not in supported_schema_versions:
         allowed = ", ".join(supported_schema_versions)
         errors.append(f"schemaVersion must be one of: {allowed}")
@@ -293,6 +293,16 @@ def validate_summary(path: Path, source_root: Path | None = None) -> list[str]:
     errors.extend(_validate_frontmatter_order(text, expected_order, "summary"))
     if re.search(r"(?m)^## Transcript\s*$", body):
         errors.append("summary must not contain a Transcript section")
+    if schema_version == SUMMARY_NOTE_SCHEMA_VERSION:
+        title_heading = f"# {metadata.get('title')}"
+        video_embed = f"![]({metadata.get('url')})"
+        title_position = body.find(title_heading)
+        embed_position = body.find(video_embed)
+        summary_position = body.find("## 1. Summary")
+        if embed_position < 0:
+            errors.append("summary body must contain the video embed")
+        elif not (title_position < embed_position < summary_position):
+            errors.append("summary video embed must appear after the title and before Summary")
     headings = [
         "## 1. Summary",
         "## 2. Structuring (from abstract to concrete)",

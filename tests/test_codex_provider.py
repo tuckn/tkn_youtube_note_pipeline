@@ -29,7 +29,9 @@ def result_json() -> str:
         {
             "description": "説明",
             "summary": "要約",
-            "structuring": [{"heading": "構造", "details": ["詳細"]}],
+            "structuring": [
+                {"heading": "構造", "details": ["詳細"], "subsections": []}
+            ],
             "key_points": [{"text": "要点", "timestamp_seconds": 0}],
             "technical_terms": [],
             "conclusion": "結論",
@@ -56,7 +58,7 @@ def test_codex_structured_output(monkeypatch) -> None:
     assert result.document.summary == "要約"
     assert result.prompt_source == "package:youtube_note_pipeline/prompts/default-summary.md"
     assert result.prompt_id == "70a1a332-fa68-4a6d-9499-d703a17ced3e"
-    assert result.prompt_version == "1.0"
+    assert result.prompt_version == "2.0"
     assert result.prompt_envelope_version == "test-v1"
     assert result.prompt_sha256 is not None
 
@@ -71,6 +73,9 @@ def test_codex_schema_requires_nullable_and_empty_list_fields(monkeypatch) -> No
         assert "bare terms are not allowed" in technical_terms["description"]
         key_point = schema["$defs"]["KeyPoint"]
         assert set(key_point["required"]) == set(key_point["properties"])
+        summary_section = schema["$defs"]["SummarySection"]
+        assert set(summary_section["required"]) == set(summary_section["properties"])
+        assert "SummarySubsection" in schema["$defs"]
         output = Path(command[command.index("--output-last-message") + 1])
         output.write_text(result_json(), encoding="utf-8")
         return Mock(returncode=0, stdout="", stderr="")

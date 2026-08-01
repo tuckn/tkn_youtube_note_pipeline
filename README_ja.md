@@ -106,7 +106,7 @@ youtube-notes build-summary path/to/source-note.md --summary-prompt my-summary.m
 
 sourceのTranscriptをconfigured structured-output provider（version 1ではCodex）へ渡し、
 sourceに忠実な日本語summaryノートを作り、両方のノートを検証します。semantic
-classificationやontology linkは追加しません。summary schema 2.0では、1つのsourceを
+classificationやontology linkは追加しません。summary schema 2.0以降では、1つのsourceを
 複数promptのsummaryが共有できるよう、特定summaryのdescriptionをsourceへ同期しません。
 
 組み込みのsummary指示を編集用ファイルとして初期化します。
@@ -320,10 +320,11 @@ manifestはschema version、hash、選択したcaption track、tool version、ca
 成功・失敗を記録します。字幕取得に失敗した場合、source・summaryノートは作りません。
 
 生成するsourceノートはFrontmatter `schemaVersion: "1.0"`を維持します。新しいsummaryは
-`type: summary`と`schemaVersion: "3.0"`を使用し、`promptId`と`promptVersion`を含みます。
-`nouns`は登録せず、別のCLIによる付与に委ねます。既存summaryのschema 1.0と2.0も
-引き続き検証できます。両方のノートに同じ`cover`を保存します。現行summaryのdescriptionは
-`## 5. Conclusion`から作成し、長い場合は一定長の1行へ区切ります。
+`type: summary`と`schemaVersion: "4.0"`を使用し、`promptId`と`promptVersion`を含みます。
+`nouns`は登録せず、別のCLIによる付与に委ねます。既存summaryのschema 1.0、2.0、3.0も
+引き続き検証できます。両方のノートに同じ`cover`を保存し、現行summaryはタイトル直下にも
+動画を埋め込みます。現行summaryのdescriptionは`## 5. Conclusion`から作成し、長い場合は
+一定長の1行へ区切ります。
 共有sourceのdescriptionは変更しません。生成時のsummaryは`reviewStatus: unreviewed`で
 始まります。その後の検証ではreview workflowの状態として`unreviewed`、`pending`、
 `reviewing`、`accepted`、`needs-revision`、`rejected`を受け付けます。

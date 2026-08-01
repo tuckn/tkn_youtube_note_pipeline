@@ -9,6 +9,7 @@ from youtube_note_pipeline.models import (
     KeyPoint,
     SummaryDocument,
     SummarySection,
+    SummarySubsection,
 )
 from youtube_note_pipeline.notes import (
     compact_description,
@@ -51,12 +52,21 @@ class FakeProvider:
                 structuring=[
                     SummarySection(
                         heading="中心となる考え",
-                        details=["最初に論点を提示する。", "次に具体例で説明する。"],
+                        details=[],
+                        subsections=[
+                            SummarySubsection(
+                                heading="論点と具体例",
+                                details=[
+                                    "最初に論点を提示する。",
+                                    "次に具体例で説明する。",
+                                ],
+                            )
+                        ],
                     )
                 ],
                 key_points=[KeyPoint(text="最初の論点", timestamp_seconds=0)],
                 technical_terms=[
-                    "**pipeline**: 動画では、処理を複数の段階に分ける方法を指す。"
+                    "**pipeline**: 処理を複数の段階に分けて進める方法。"
                 ],
                 conclusion="論点から結論までを段階的に整理する。",
             ),
@@ -107,13 +117,22 @@ def test_full_synthetic_pipeline_and_idempotency(tmp_path: Path) -> None:
     assert summary_metadata["type"] == "summary"
     assert "nouns" not in summary_metadata
     assert (
-        "- **pipeline**: 動画では、処理を複数の段階に分ける方法を指す。"
+        "- **pipeline**: 処理を複数の段階に分けて進める方法。" in summary_text
+    )
+    assert (
+        "# Synthetic pipeline test video\n\n"
+        "![](https://www.youtube.com/watch?v=TESTVID0001)\n\n"
+        "## 1. Summary"
+    ) in summary_text
+    assert "### 中心となる考え\n\n#### 論点と具体例" in summary_text
+    assert (
+        "- [0:00](https://www.youtube.com/watch?v=TESTVID0001&t=0s) 最初の論点"
         in summary_text
     )
     assert source_metadata["description"] == ""
     assert summary_metadata["description"] == "論点から結論までを段階的に整理する。"
     assert source_metadata["cover"] == summary_metadata["cover"]
-    assert summary_metadata["schemaVersion"] == "3.0"
+    assert summary_metadata["schemaVersion"] == "4.0"
     assert summary_metadata["promptId"] == DEFAULT_TEST_PROMPT_ID
     assert summary_metadata["promptVersion"] == "1.0"
     assert summary_metadata["cliptool"] == "Codex"
@@ -138,6 +157,11 @@ def test_compact_description_uses_a_sentence_boundary_or_ellipsis() -> None:
 
     compacted_without_boundary = compact_description("a" * 50, max_chars=20)
     assert compacted_without_boundary == "a" * 19 + "…"
+
+
+def test_summary_section_requires_direct_details_or_subsections() -> None:
+    with pytest.raises(ValueError, match="must contain details or subsections"):
+        SummarySection(heading="空の分類", details=[], subsections=[])
 
 
 def test_changed_caption_is_a_source_collision(tmp_path: Path) -> None:
@@ -369,7 +393,7 @@ def test_legacy_summary_schema_1_remains_valid(tmp_path: Path) -> None:
     generated_text = generated.path.read_text(encoding="utf-8")
     legacy_text = (
         generated_text.replace("type: summary", "type: webClip")
-        .replace('schemaVersion: "3.0"', 'schemaVersion: "1.0"')
+        .replace('schemaVersion: "4.0"', 'schemaVersion: "1.0"')
         .replace("url:", "nouns: []\nurl:", 1)
         .replace(f"promptId: {DEFAULT_TEST_PROMPT_ID}\n", "")
         .replace('promptVersion: "1.0"\n', "")
@@ -400,7 +424,7 @@ def test_existing_schema_2_summary_remains_valid_and_idempotent(tmp_path: Path) 
     schema_2_text = (
         generated.path.read_text(encoding="utf-8")
         .replace("type: summary", "type: webClip")
-        .replace('schemaVersion: "3.0"', 'schemaVersion: "2.0"')
+        .replace('schemaVersion: "4.0"', 'schemaVersion: "2.0"')
         .replace("url:", "nouns: []\nurl:", 1)
     )
     generated.path.write_text(schema_2_text, encoding="utf-8")
@@ -411,6 +435,43 @@ def test_existing_schema_2_summary_remains_valid_and_idempotent(tmp_path: Path) 
         tmp_path / "summary",
         FakeProvider(),
     ).status == "unchanged"
+
+
+def test_existing_schema_3_summary_remains_valid(tmp_path: Path) -> None:
+    manifest = import_raw(
+        FIXTURES / "metadata.info.json",
+        FIXTURES / "captions.ja.json3",
+        tmp_path / "raw",
+    )
+    source = build_source(manifest, tmp_path / "source")
+    generated = build_summary(source.path, tmp_path / "summary", FakeProvider())
+    schema_3_text = generated.path.read_text(encoding="utf-8").replace(
+        'schemaVersion: "4.0"',
+        'schemaVersion: "3.0"',
+    )
+    generated.path.write_text(schema_3_text, encoding="utf-8")
+
+    assert validate_summary(generated.path, tmp_path / "source") == []
+
+
+def test_current_summary_requires_video_embed(tmp_path: Path) -> None:
+    manifest = import_raw(
+        FIXTURES / "metadata.info.json",
+        FIXTURES / "captions.ja.json3",
+        tmp_path / "raw",
+    )
+    source = build_source(manifest, tmp_path / "source")
+    generated = build_summary(source.path, tmp_path / "summary", FakeProvider())
+    without_embed = generated.path.read_text(encoding="utf-8").replace(
+        "![](https://www.youtube.com/watch?v=TESTVID0001)\n\n",
+        "",
+        1,
+    )
+    generated.path.write_text(without_embed, encoding="utf-8")
+
+    assert validate_summary(generated.path, tmp_path / "source") == [
+        "summary body must contain the video embed"
+    ]
 
 
 def test_current_summary_remains_valid_after_nouns_metadata_is_added(

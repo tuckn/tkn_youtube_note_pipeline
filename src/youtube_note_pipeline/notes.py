@@ -21,7 +21,7 @@ from youtube_note_pipeline.models import (
 from youtube_note_pipeline.naming import path_to_file_uri
 
 SOURCE_NOTE_SCHEMA_VERSION = "1.0"
-SUMMARY_NOTE_SCHEMA_VERSION = "3.0"
+SUMMARY_NOTE_SCHEMA_VERSION = "4.0"
 DESCRIPTION_MAX_CHARS = 240
 
 
@@ -191,6 +191,8 @@ def render_summary(
         "",
         f"# {video.title}",
         "",
+        f"![]({video.canonical_url})",
+        "",
         "## 1. Summary",
         "",
         document.summary,
@@ -199,7 +201,19 @@ def render_summary(
         "",
     ]
     for section in document.structuring:
-        lines.extend([f"### {section.heading}", "", *(f"- {item}" for item in section.details), ""])
+        lines.extend([f"### {section.heading}", ""])
+        lines.extend(f"- {item}" for item in section.details)
+        if section.details:
+            lines.append("")
+        for subsection in section.subsections:
+            lines.extend(
+                [
+                    f"#### {subsection.heading}",
+                    "",
+                    *(f"- {item}" for item in subsection.details),
+                    "",
+                ]
+            )
     lines.extend(["## 3. Key points", ""])
     for point in document.key_points:
         if point.timestamp_seconds is None:

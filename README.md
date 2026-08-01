@@ -115,9 +115,9 @@ youtube-notes build-summary path/to/source-note.md --summary-prompt my-summary.m
 This sends the source transcript to the configured structured-output provider
 (Codex in version 1) and creates a source-faithful Japanese summary note. It
 validates both notes and does not add semantic classification or ontology links.
-Summary schema 2.0 does not copy one summary's description back to the shared
-source note, because one source can now have summaries made with multiple
-prompts.
+Summary schemas 2.0 and later do not copy one summary's description back to the
+shared source note, because one source can now have summaries made with
+multiple prompts.
 
 Initialize an editable copy of the built-in summary instructions:
 
@@ -350,10 +350,11 @@ version, canonical URL, and success or failure. A failed caption acquisition
 does not produce a source or summary note.
 
 Generated source notes remain on Frontmatter `schemaVersion: "1.0"`. New summary
-notes use `type: summary` and `schemaVersion: "3.0"`, include `promptId` and
+notes use `type: summary` and `schemaVersion: "4.0"`, include `promptId` and
 `promptVersion`, and omit `nouns` so a separate CLI can assign that metadata.
-Legacy summary schemas 1.0 and 2.0 remain valid for existing notes. Both notes
-store the same `cover`. A current summary description is derived from
+Legacy summary schemas 1.0, 2.0, and 3.0 remain valid for existing notes. Both
+notes store the same `cover`; current summaries also place the video embed below
+the title. A current summary description is derived from
 `## 5. Conclusion`; long descriptions are compacted to a bounded single-line
 value. Its shared source description is not modified. A generated summary
 starts with `reviewStatus: unreviewed`. Subsequent validation accepts the review
