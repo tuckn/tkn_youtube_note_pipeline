@@ -9,12 +9,13 @@ import subprocess
 import tempfile
 from pathlib import Path
 
-from youtube_note_pipeline.models import SummaryDocument, SummaryRequest
-from youtube_note_pipeline.prompting import (
-    load_summary_prompt,
-    render_summary_prompt,
-)
+from youtube_note_pipeline.models import SummaryRequest
+from youtube_note_pipeline.prompting import render_summary_prompt
 from youtube_note_pipeline.providers.base import ProviderResult
+from youtube_note_pipeline.summary_resources import (
+    load_summary_profile,
+    validate_summary_document,
+)
 
 logger = logging.getLogger(__name__)
 MODEL_LINE = re.compile(r"(?m)^\s*model:\s*(\S+)\s*$")
@@ -30,11 +31,10 @@ class CodexProvider:
         self,
         executable: str = "codex",
         model: str | None = None,
-        summary_prompt: Path | None = None,
     ) -> None:
         self.executable = executable
         self.model = model
-        self.prompt = load_summary_prompt(summary_prompt)
+        self.profile = load_summary_profile()
 
     def preflight(self) -> str:
         logger.debug("Running Codex preflight: %s --version", self.executable)
@@ -59,9 +59,9 @@ class CodexProvider:
         return version
 
     def generate(self, request: SummaryRequest) -> ProviderResult:
-        prompt = render_summary_prompt(self.prompt, request)
+        prompt = render_summary_prompt(self.profile.prompt, request)
         provider_version = self.preflight()
-        schema = SummaryDocument.model_json_schema()
+        schema = self.profile.output_schema.schema
         with tempfile.TemporaryDirectory(prefix="youtube-notes-codex-") as temp:
             schema_path = Path(temp) / "summary.schema.json"
             output_path = Path(temp) / "summary.json"
@@ -99,9 +99,9 @@ class CodexProvider:
                     f"Codex summary generation failed with exit {result.returncode}: {detail}"
                 )
             try:
-                payload = output_path.read_text(encoding="utf-8")
-                document = SummaryDocument.model_validate_json(payload)
-            except (OSError, UnicodeError, ValueError) as exc:
+                payload = json.loads(output_path.read_text(encoding="utf-8"))
+                document = validate_summary_document(payload, self.profile.output_schema)
+            except (OSError, UnicodeError, json.JSONDecodeError, ValueError) as exc:
                 raise RuntimeError(f"Codex returned invalid structured output: {exc}") from exc
         effective_model = self.model or _model_from_execution_log(result.stderr)
         generator = f"Codex ({effective_model})" if effective_model else "Codex"
@@ -115,9 +115,15 @@ class CodexProvider:
             model=effective_model,
             generator=generator,
             provider_version=provider_version,
-            prompt_id=self.prompt.prompt_id,
-            prompt_version=self.prompt.version,
+            prompt_id=self.profile.prompt.prompt_id,
+            prompt_version=self.profile.prompt.version,
             prompt_envelope_version=request.prompt_version,
-            prompt_source=self.prompt.source,
-            prompt_sha256=self.prompt.sha256,
+            prompt_source=self.profile.prompt.source,
+            prompt_sha256=self.profile.prompt.sha256,
+            output_schema_id=self.profile.output_schema.resource_id,
+            output_schema_version=self.profile.output_schema.version,
+            output_schema_sha256=self.profile.output_schema.sha256,
+            template_id=self.profile.template.resource_id,
+            template_version=self.profile.template.version,
+            template_sha256=self.profile.template.sha256,
         )

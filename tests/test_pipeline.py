@@ -1,16 +1,11 @@
 import json
+from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 
 import pytest
 
 from youtube_note_pipeline import pipeline
-from youtube_note_pipeline.models import (
-    KeyPoint,
-    SummaryDocument,
-    SummarySection,
-    SummarySubsection,
-)
 from youtube_note_pipeline.notes import (
     compact_description,
     split_note,
@@ -20,10 +15,55 @@ from youtube_note_pipeline.pipeline import build_source, build_summary
 from youtube_note_pipeline.prompting import SummaryPrompt
 from youtube_note_pipeline.providers.base import ProviderResult
 from youtube_note_pipeline.raw import import_raw
+from youtube_note_pipeline.summary_resources import (
+    load_summary_profile,
+    validate_summary_document,
+)
 from youtube_note_pipeline.validation import validate_source, validate_summary
 
 FIXTURES = Path(__file__).parent / "fixtures"
 DEFAULT_TEST_PROMPT_ID = "00000000-0000-4000-8000-000000000010"
+
+
+def _summary_document(summary: str) -> dict[str, object]:
+    return {
+        "description": "動画の論点を短く説明する。",
+        "summary": summary,
+        "structuring": [
+            {
+                "heading": "中心となる考え",
+                "details": [],
+                "subsections": [
+                    {
+                        "heading": "論点と具体例",
+                        "details": [
+                            "最初に論点を提示する。",
+                            "次に具体例で説明する。",
+                        ],
+                    }
+                ],
+            }
+        ],
+        "key_points": [{"text": "最初の論点", "timestamp_seconds": 0}],
+        "technical_terms": ["**pipeline**: 処理を複数の段階に分けて進める方法。"],
+        "conclusion": "論点から結論までを段階的に整理する。",
+    }
+
+
+def _without_current_resource_provenance(text: str) -> str:
+    profile = load_summary_profile()
+    lines = (
+        'promptSha256: "' + "1" * 64 + '"',
+        f"outputSchemaId: {profile.output_schema.resource_id}",
+        f'outputSchemaVersion: "{profile.output_schema.version}"',
+        f'outputSchemaSha256: "{profile.output_schema.sha256}"',
+        f"templateId: {profile.template.resource_id}",
+        f'templateVersion: "{profile.template.version}"',
+        f'templateSha256: "{profile.template.sha256}"',
+    )
+    for line in lines:
+        text = text.replace(line + "\n", "")
+    return text
 
 
 class FakeProvider:
@@ -31,54 +71,44 @@ class FakeProvider:
         self,
         prompt_id: str = DEFAULT_TEST_PROMPT_ID,
         prompt_version: str = "1.0",
+        prompt_sha256: str = "1" * 64,
         summary: str = "動画は論点、具体例、結論の順に説明する。",
     ) -> None:
-        self.prompt = SummaryPrompt(
+        prompt = SummaryPrompt(
             prompt_id=prompt_id,
             version=prompt_version,
             instructions="Test instructions.",
-            mode="custom",
             source="test:fixture.md",
-            sha256="1" * 64,
+            sha256=prompt_sha256,
         )
         self.summary = summary
+        self.profile = replace(
+            load_summary_profile(),
+            name="test",
+            source="test:profile",
+            sha256="2" * 64,
+            prompt=prompt,
+        )
 
     def generate(self, request):
         assert "最初の論点" in request.transcript
         return ProviderResult(
-            document=SummaryDocument(
-                description="動画の論点を短く説明する。",
-                summary=self.summary,
-                structuring=[
-                    SummarySection(
-                        heading="中心となる考え",
-                        details=[],
-                        subsections=[
-                            SummarySubsection(
-                                heading="論点と具体例",
-                                details=[
-                                    "最初に論点を提示する。",
-                                    "次に具体例で説明する。",
-                                ],
-                            )
-                        ],
-                    )
-                ],
-                key_points=[KeyPoint(text="最初の論点", timestamp_seconds=0)],
-                technical_terms=[
-                    "**pipeline**: 処理を複数の段階に分けて進める方法。"
-                ],
-                conclusion="論点から結論までを段階的に整理する。",
-            ),
+            document=_summary_document(self.summary),
             provider="fake",
             model="fixture",
             generator="Fake (fixture)",
             provider_version="test",
-            prompt_id=self.prompt.prompt_id,
-            prompt_version=self.prompt.version,
+            prompt_id=self.profile.prompt.prompt_id,
+            prompt_version=self.profile.prompt.version,
             prompt_envelope_version=request.prompt_version,
             prompt_source="test:fixture.md",
-            prompt_sha256="1" * 64,
+            prompt_sha256=self.profile.prompt.sha256,
+            output_schema_id=self.profile.output_schema.resource_id,
+            output_schema_version=self.profile.output_schema.version,
+            output_schema_sha256=self.profile.output_schema.sha256,
+            template_id=self.profile.template.resource_id,
+            template_version=self.profile.template.version,
+            template_sha256=self.profile.template.sha256,
         )
 
 
@@ -132,7 +162,7 @@ def test_full_synthetic_pipeline_and_idempotency(tmp_path: Path) -> None:
     assert source_metadata["description"] == ""
     assert summary_metadata["description"] == "論点から結論までを段階的に整理する。"
     assert source_metadata["cover"] == summary_metadata["cover"]
-    assert summary_metadata["schemaVersion"] == "4.0"
+    assert summary_metadata["schemaVersion"] == "5.0"
     assert summary_metadata["promptId"] == DEFAULT_TEST_PROMPT_ID
     assert summary_metadata["promptVersion"] == "1.0"
     assert summary_metadata["cliptool"] == "Codex"
@@ -143,7 +173,10 @@ def test_full_synthetic_pipeline_and_idempotency(tmp_path: Path) -> None:
     assert summary_text.index("source:") < summary_text.index("generator:")
     assert summary_text.index("generator:") < summary_text.index("promptId:")
     assert summary_text.index("promptId:") < summary_text.index("promptVersion:")
-    assert summary_text.index("promptVersion:") < summary_text.index("reviewStatus:")
+    assert summary_text.index("promptVersion:") < summary_text.index("promptSha256:")
+    assert summary_text.index("promptSha256:") < summary_text.index("outputSchemaId:")
+    assert summary_text.index("outputSchemaId:") < summary_text.index("templateId:")
+    assert summary_text.index("templateId:") < summary_text.index("reviewStatus:")
     assert summary_text.index("reviewStatus:") < summary_text.index("date:")
     assert summary_text.index("date:") < summary_text.index("updated:")
     assert summary_text.index("updated:") < summary_text.index("noteId:")
@@ -159,9 +192,13 @@ def test_compact_description_uses_a_sentence_boundary_or_ellipsis() -> None:
     assert compacted_without_boundary == "a" * 19 + "…"
 
 
-def test_summary_section_requires_direct_details_or_subsections() -> None:
-    with pytest.raises(ValueError, match="must contain details or subsections"):
-        SummarySection(heading="空の分類", details=[], subsections=[])
+def test_summary_schema_requires_direct_details_or_subsections() -> None:
+    profile = load_summary_profile()
+    invalid = _summary_document("要約")
+    invalid["structuring"] = [{"heading": "空の分類", "details": [], "subsections": []}]
+
+    with pytest.raises(ValueError, match="structured summary does not match output schema"):
+        validate_summary_document(invalid, profile.output_schema)
 
 
 def test_changed_caption_is_a_source_collision(tmp_path: Path) -> None:
@@ -382,6 +419,29 @@ def test_prompt_version_change_updates_same_summary_and_preserves_note_identity(
     assert validate_summary(updated.path, tmp_path / "source") == []
 
 
+def test_prompt_hash_change_requires_explicit_overwrite(tmp_path: Path) -> None:
+    manifest = import_raw(
+        FIXTURES / "metadata.info.json",
+        FIXTURES / "captions.ja.json3",
+        tmp_path / "raw",
+    )
+    source = build_source(manifest, tmp_path / "source")
+    generated = build_summary(source.path, tmp_path / "summary", FakeProvider())
+    initial_metadata, _ = split_note(generated.path.read_text(encoding="utf-8"))
+    changed = FakeProvider(prompt_sha256="2" * 64)
+
+    with pytest.raises(FileExistsError, match="resources changed"):
+        build_summary(source.path, tmp_path / "summary", changed)
+
+    updated = build_summary(source.path, tmp_path / "summary", changed, overwrite=True)
+    updated_metadata, _ = split_note(updated.path.read_text(encoding="utf-8"))
+    assert updated.status == "updated"
+    assert updated_metadata["promptSha256"] == "2" * 64
+    assert updated_metadata["noteId"] == initial_metadata["noteId"]
+    assert updated_metadata["date"] == initial_metadata["date"]
+    assert validate_summary(updated.path, tmp_path / "source") == []
+
+
 def test_legacy_summary_schema_1_remains_valid(tmp_path: Path) -> None:
     manifest = import_raw(
         FIXTURES / "metadata.info.json",
@@ -391,9 +451,9 @@ def test_legacy_summary_schema_1_remains_valid(tmp_path: Path) -> None:
     source = build_source(manifest, tmp_path / "source")
     generated = build_summary(source.path, tmp_path / "summary", FakeProvider())
     generated_text = generated.path.read_text(encoding="utf-8")
-    legacy_text = (
+    legacy_text = _without_current_resource_provenance(
         generated_text.replace("type: summary", "type: webClip")
-        .replace('schemaVersion: "4.0"', 'schemaVersion: "1.0"')
+        .replace('schemaVersion: "5.0"', 'schemaVersion: "1.0"')
         .replace("url:", "nouns: []\nurl:", 1)
         .replace(f"promptId: {DEFAULT_TEST_PROMPT_ID}\n", "")
         .replace('promptVersion: "1.0"\n', "")
@@ -424,9 +484,10 @@ def test_existing_schema_2_summary_remains_valid_and_idempotent(tmp_path: Path) 
     schema_2_text = (
         generated.path.read_text(encoding="utf-8")
         .replace("type: summary", "type: webClip")
-        .replace('schemaVersion: "4.0"', 'schemaVersion: "2.0"')
+        .replace('schemaVersion: "5.0"', 'schemaVersion: "2.0"')
         .replace("url:", "nouns: []\nurl:", 1)
     )
+    schema_2_text = _without_current_resource_provenance(schema_2_text)
     generated.path.write_text(schema_2_text, encoding="utf-8")
 
     assert validate_summary(generated.path, tmp_path / "source") == []
@@ -437,7 +498,10 @@ def test_existing_schema_2_summary_remains_valid_and_idempotent(tmp_path: Path) 
     ).status == "unchanged"
 
 
-def test_existing_schema_3_summary_remains_valid(tmp_path: Path) -> None:
+@pytest.mark.parametrize("schema_version", ["3.0", "4.0"])
+def test_existing_schema_3_or_4_summary_remains_valid(
+    tmp_path: Path, schema_version: str
+) -> None:
     manifest = import_raw(
         FIXTURES / "metadata.info.json",
         FIXTURES / "captions.ja.json3",
@@ -445,11 +509,12 @@ def test_existing_schema_3_summary_remains_valid(tmp_path: Path) -> None:
     )
     source = build_source(manifest, tmp_path / "source")
     generated = build_summary(source.path, tmp_path / "summary", FakeProvider())
-    schema_3_text = generated.path.read_text(encoding="utf-8").replace(
-        'schemaVersion: "4.0"',
-        'schemaVersion: "3.0"',
+    legacy_text = generated.path.read_text(encoding="utf-8").replace(
+        'schemaVersion: "5.0"',
+        f'schemaVersion: "{schema_version}"',
     )
-    generated.path.write_text(schema_3_text, encoding="utf-8")
+    legacy_text = _without_current_resource_provenance(legacy_text)
+    generated.path.write_text(legacy_text, encoding="utf-8")
 
     assert validate_summary(generated.path, tmp_path / "source") == []
 

@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from youtube_note_pipeline.config import public_config, resolve_config
+from youtube_note_pipeline.config import initialize_user_config, public_config, resolve_config
 from youtube_note_pipeline.console_logging import ColorFormatter, log_success, supports_color
 from youtube_note_pipeline.pipeline import (
     build_source,
@@ -20,7 +20,7 @@ from youtube_note_pipeline.pipeline import (
     run_import,
     write_report,
 )
-from youtube_note_pipeline.prompting import initialize_user_prompt, load_summary_prompt
+from youtube_note_pipeline.summary_resources import load_summary_profile
 from youtube_note_pipeline.validation import validate_path
 
 logger = logging.getLogger(__name__)
@@ -40,11 +40,6 @@ def _common(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--summary-root", type=Path)
     parser.add_argument("--reports-root", type=Path)
     parser.add_argument("--model")
-    parser.add_argument(
-        "--summary-prompt",
-        type=Path,
-        help="custom summary instructions Markdown file",
-    )
     _verbosity(parser)
 
 
@@ -125,15 +120,12 @@ def build_parser() -> argparse.ArgumentParser:
     config_subparsers = config_parser.add_subparsers(dest="config_command", required=True)
     show = config_subparsers.add_parser("show", help="show resolved non-secret configuration")
     _common(show)
-
-    prompt_parser = subparsers.add_parser("prompt", help="summary prompt operations")
-    prompt_subparsers = prompt_parser.add_subparsers(dest="prompt_command", required=True)
-    prompt_init = prompt_subparsers.add_parser(
+    config_init = config_subparsers.add_parser(
         "init",
-        help="create a uniquely identified prompt from the built-in instructions",
+        help="create the user-global configuration without overwriting edits",
     )
-    prompt_init.add_argument("name", nargs="?", default="summary.md")
-    _verbosity(prompt_init)
+    _verbosity(config_init)
+
     return parser
 
 
@@ -146,7 +138,6 @@ def _resolved(args: argparse.Namespace) -> Any:
             "summary_root",
             "reports_root",
             "model",
-            "summary_prompt",
         )
     }
     return resolve_config(explicit_config=getattr(args, "config", None), overrides=overrides)
@@ -165,36 +156,42 @@ def main(argv: list[str] | None = None) -> int:
     _configure_logging(args)
     logger.debug("Parsed command: %s", args.command)
     try:
-        if args.command == "prompt":
-            logger.info("Initializing user summary prompt: %s", args.name)
-            path = initialize_user_prompt(args.name)
-            prompt = load_summary_prompt(path)
-            print(
-                json.dumps(
-                    {
-                        "status": "created",
-                        "path": str(path),
-                        "prompt_id": prompt.prompt_id,
-                        "prompt_version": prompt.version,
-                    },
-                    ensure_ascii=False,
-                )
-            )
+        if args.command == "config" and args.config_command == "init":
+            logger.info("Initializing user-global configuration")
+            path, status = initialize_user_config()
+            print(json.dumps({"status": status, "path": str(path)}, ensure_ascii=False))
             return 0
         resolved = _resolved(args)
         config = resolved.config
         logger.debug("Configuration sources: %s", ", ".join(resolved.sources))
         if args.command == "config":
             logger.info("Showing resolved configuration")
-            prompt = load_summary_prompt(config.summary_prompt)
+            profile = load_summary_profile()
+            prompt = profile.prompt
             values = public_config(config)
-            values["summary_prompt"] = {
-                "configured": values["summary_prompt"],
-                "mode": prompt.mode,
-                "source": prompt.source,
-                "id": prompt.prompt_id,
-                "version": prompt.version,
-                "sha256": prompt.sha256,
+            values["summary_profile"] = {
+                "name": profile.name,
+                "source": profile.source,
+                "sha256": profile.sha256,
+                "prompt": {
+                    "source": prompt.source,
+                    "id": prompt.prompt_id,
+                    "version": prompt.version,
+                    "sha256": prompt.sha256,
+                },
+                "output_schema": {
+                    "source": profile.output_schema.source,
+                    "id": profile.output_schema.resource_id,
+                    "version": profile.output_schema.version,
+                    "sha256": profile.output_schema.sha256,
+                },
+                "template": {
+                    "source": profile.template.source,
+                    "id": profile.template.resource_id,
+                    "version": profile.template.version,
+                    "sha256": profile.template.sha256,
+                    "note_schema_version": profile.template.note_schema_version,
+                },
             }
             print(
                 json.dumps(

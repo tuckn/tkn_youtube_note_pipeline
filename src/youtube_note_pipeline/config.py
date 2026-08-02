@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+from importlib.resources import files
 from pathlib import Path
 from typing import Any
 
@@ -9,6 +11,7 @@ import yaml
 from pydantic import BaseModel, ConfigDict, Field
 
 APP_DIRECTORY = "youtube_note_pipeline"
+DEFAULT_CONFIG_RESOURCE = "resources/config.example.yaml"
 
 
 class PipelineConfig(BaseModel):
@@ -22,7 +25,6 @@ class PipelineConfig(BaseModel):
     model: str | None = None
     fallback_languages: list[str] = Field(default_factory=list)
     codex_executable: str = "codex"
-    summary_prompt: Path | None = None
 
 
 class ResolvedConfig(BaseModel):
@@ -42,10 +44,6 @@ def user_state_root() -> Path:
     return user_root() / "state"
 
 
-def user_prompts_root() -> Path:
-    return user_root() / "prompts"
-
-
 def user_cache_root() -> Path:
     return Path.home() / ".cache" / APP_DIRECTORY
 
@@ -61,12 +59,44 @@ def default_values() -> dict[str, Any]:
         "model": None,
         "fallback_languages": [],
         "codex_executable": "codex",
-        "summary_prompt": None,
     }
 
 
 def global_config_path() -> Path:
     return user_root() / "config.yaml"
+
+
+def initialize_user_config() -> tuple[Path, str]:
+    resource = files("youtube_note_pipeline").joinpath(DEFAULT_CONFIG_RESOURCE)
+    try:
+        payload = resource.read_bytes()
+    except (OSError, FileNotFoundError) as exc:
+        raise RuntimeError(
+            f"built-in configuration template is unavailable: {DEFAULT_CONFIG_RESOURCE}: {exc}"
+        ) from exc
+    target = global_config_path()
+    target.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        descriptor = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL)
+    except FileExistsError as exc:
+        try:
+            existing = target.read_bytes()
+        except OSError as read_exc:
+            raise OSError(f"cannot read existing configuration {target}: {read_exc}") from read_exc
+        if existing == payload:
+            return target, "unchanged"
+        raise FileExistsError(
+            f"refusing to overwrite existing configuration: {target}"
+        ) from exc
+    try:
+        with os.fdopen(descriptor, "wb") as stream:
+            stream.write(payload)
+            stream.flush()
+            os.fsync(stream.fileno())
+    except Exception:
+        target.unlink(missing_ok=True)
+        raise
+    return target, "created"
 
 
 def _load_yaml(path: Path) -> dict[str, Any]:
@@ -86,19 +116,6 @@ def _resolve_paths(values: dict[str, Any], cwd: Path) -> dict[str, Any]:
     for key in ("raw_root", "source_root", "summary_root", "reports_root"):
         path = Path(result[key]).expanduser()
         result[key] = path if path.is_absolute() else (cwd / path).resolve()
-    prompt_value = result.get("summary_prompt")
-    if prompt_value is not None:
-        raw_prompt = str(prompt_value)
-        prompt_path = Path(raw_prompt).expanduser()
-        if prompt_path.is_absolute():
-            result["summary_prompt"] = prompt_path
-        elif Path(raw_prompt).name == raw_prompt:
-            result["summary_prompt"] = user_prompts_root() / prompt_path
-        else:
-            raise ValueError(
-                "summary_prompt must be a filename in the user prompts directory "
-                "or an absolute path"
-            )
     return result
 
 
@@ -138,5 +155,4 @@ def public_config(config: PipelineConfig) -> dict[str, Any]:
         "model": config.model,
         "fallback_languages": config.fallback_languages,
         "codex_executable": config.codex_executable,
-        "summary_prompt": str(config.summary_prompt) if config.summary_prompt else None,
     }

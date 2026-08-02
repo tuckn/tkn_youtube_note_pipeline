@@ -1,0 +1,10 @@
+raw_root: ~/.tkn/youtube_note_pipeline/data/raw
+source_root: ~/.tkn/youtube_note_pipeline/data/source
+summary_root: ~/.tkn/youtube_note_pipeline/data/summary
+reports_root: ~/.tkn/youtube_note_pipeline/state/reports
+
+provider: codex
+model: null
+fallback_languages:
+  - en
+codex_executable: codex

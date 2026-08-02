@@ -2,33 +2,25 @@
 
 [日本語](README_ja.md)
 
-`tkn_youtube_note_pipeline` turns one YouTube video into three reproducible data
-layers:
+`tkn_youtube_note_pipeline` is a CLI that summarizes YouTube videos in Japanese and saves the result as Markdown notes.
 
-1. immutable raw metadata, captions, and a capture manifest;
-2. a source Markdown note containing provenance and the complete transcript;
-3. a source-faithful summary Markdown note generated through a structured-output
-   provider.
+For normal use, pass a video URL to one command:
 
-Semantic classification and ontology promotion are intentionally outside this
-pipeline.
+```console
+youtube-notes ingest "https://www.youtube.com/watch?v=VIDEO_ID"
+```
 
 ## Requirements
 
 - Python 3.11 or newer
 - [uv](https://docs.astral.sh/uv/)
-- `codex` on `PATH` for summary generation
+- an authenticated `codex` on `PATH` for summary generation
 
-The Python `yt-dlp` package is installed as a project dependency and is called
-through its embedded `YoutubeDL` API. The separate `yt-dlp` command does not
-need to be installed or added to `PATH`.
-
-The pipeline does not download video binaries and does not install or configure
-Codex credentials.
+The Python `yt-dlp` package is installed automatically as a dependency, so the separate `yt-dlp` command is not required. The CLI does not download the video itself.
 
 ## Install
 
-An editable installation is recommended for normal use. Replace `C:\path\to\tkn_youtube_note_pipeline` with the actual path to this repository. Because the repository path is specified explicitly, these commands can be run from any working directory.
+An editable installation is recommended for normal use. Replace `C:\path\to\tkn_youtube_note_pipeline` with the actual path to this repository.
 
 ```console
 uv tool install -e "C:\path\to\tkn_youtube_note_pipeline"
@@ -45,145 +37,18 @@ uv tool install "C:\path\to\tkn_youtube_note_pipeline" --force
 
 A non-editable installation uses the code as it existed at installation time and does not automatically track subsequent repository changes. After updating the repository, for example with `git pull`, run the same command again to make the updated code available to the installed `youtube-notes` command.
 
-## Commands
+## Configuration
 
-Run every stage for one video:
-
-```console
-youtube-notes ingest "https://www.youtube.com/watch?v=VIDEO_ID"
-```
-
-This acquires immutable metadata and captions, builds the complete-transcript
-source note, then generates the structured summary note. It stops before
-creating derived notes when caption acquisition fails, and writes a JSON run
-report whether the run succeeds or fails.
-
-If different source or summary content already exists at the target paths and
-you intentionally want to regenerate and replace both notes, use `--force`.
-`--overwrite` is an alias with the same behavior.
+Initialize the user-global configuration and inspect the effective settings:
 
 ```console
-youtube-notes ingest "https://www.youtube.com/watch?v=VIDEO_ID" --force
-```
-
-Because `--force` replaces existing source and summary content, including
-reviewed edits, use it only after confirming that regeneration is intended. Add
-`--refresh` when you also want to create a fresh raw capture.
-
-Capture only the raw inputs:
-
-```console
-youtube-notes acquire "https://www.youtube.com/watch?v=VIDEO_ID"
-```
-
-This fetches metadata and the preferred complete JSON3 caption track without
-downloading the video. It writes the raw files and manifest but does not build a
-source or summary note. An identical successful capture is reused unless
-`--refresh` is passed.
-
-Import raw inputs acquired outside this pipeline:
-
-```console
-youtube-notes import-raw --metadata metadata.info.json --captions captions.ja.json3
-```
-
-This validates the supplied metadata and JSON3 captions and stores them as an
-immutable raw capture with a manifest. Use it when captions were acquired by an
-external fallback. It does not build derived notes.
-
-Build a source note from a successful raw manifest:
-
-```console
-youtube-notes build-source path/to/manifest.json
-```
-
-This creates the provenance-bearing Markdown source note with the complete
-timestamped transcript and verifies it against the captured JSON3 captions.
-
-Build a summary note from a valid source note:
-
-```console
-youtube-notes build-summary path/to/source-note.md
-youtube-notes build-summary path/to/source-note.md --summary-prompt my-summary.md
-```
-
-This sends the source transcript to the configured structured-output provider
-(Codex in version 1) and creates a source-faithful Japanese summary note. It
-validates both notes and does not add semantic classification or ontology links.
-Summary schemas 2.0 and later do not copy one summary's description back to the
-shared source note, because one source can now have summaries made with
-multiple prompts.
-
-Initialize an editable copy of the built-in summary instructions:
-
-```console
-youtube-notes prompt init
-youtube-notes prompt init my-summary.md
-```
-
-This creates `summary.md`, or the supplied `.md` filename, below
-`~/.tkn/youtube_note_pipeline/prompts/`. It prints the created path as JSON and
-does not modify `config.yaml`. It refuses to overwrite an existing file and
-gives every new prompt a unique UUID with initial version `"1.0"`. After editing
-the file, set `summary_prompt: my-summary.md` in a configuration file or pass
-`--summary-prompt my-summary.md` to a generating command.
-
-Validate one pipeline artifact:
-
-```console
-youtube-notes validate path/to/artifact
-```
-
-This detects whether the path is a raw manifest, source note, or summary note,
-then prints JSON containing the artifact kind, validity, and any errors. The
-command exits with a non-zero status when validation fails.
-
-Show the effective configuration:
-
-```console
+youtube-notes config init
 youtube-notes config show
 ```
 
-This prints the merged non-secret settings and the configuration sources that
-were actually loaded. For the summary prompt, it also validates the effective
-Markdown and reports its built-in/custom mode, ID, document version, resolved
-source, and SHA-256. It does not acquire or generate any content.
+`config init` creates the packaged example at `~/.tkn/youtube_note_pipeline/config.yaml` and prints its status and path as JSON. It returns `unchanged` when the same file already exists and refuses to overwrite an edited configuration. Use `./.tkn/config.yaml` for repository-local overrides, or pass any configuration file with `--config`.
 
-Version 1 accepts one video URL per invocation and rejects playlist and channel
-URLs. By default, durable output is written below
-`~/.tkn/youtube_note_pipeline/`.
-
-Only `ingest` and `build-summary` use generative AI. `ingest` uses it because
-the command includes the summary stage. `acquire`, `import-raw`, `build-source`,
-`validate`, and `config show` are deterministic operations.
-
-## Progress logs
-
-Commands show progress logs on standard error by default and keep the final JSON
-result on standard output. This follows common CLI behavior: people can see
-progress interactively, while scripts can still capture or pipe the JSON result.
-The implementation adds a `SUCCESS` level to Python's standard `logging` module
-and adds no logging dependency.
-
-```console
-youtube-notes ingest "https://www.youtube.com/watch?v=VIDEO_ID"
-youtube-notes ingest "https://www.youtube.com/watch?v=VIDEO_ID" --quiet
-youtube-notes ingest "https://www.youtube.com/watch?v=VIDEO_ID" --verbose
-```
-
-- Default: show `[INFO]`, `[SUCCESS]`, `[WARNING]`, and `[ERROR]` messages.
-- `-q` / `--quiet`: suppress progress logs and show errors only.
-- `-v` / `--verbose`: include `[DEBUG]` diagnostics.
-
-In an interactive terminal, successful outcome lines including `[SUCCESS]` are
-green, while `[ERROR]` and `[CRITICAL]` lines are red. This uses ANSI terminal
-colors and is not specific to PowerShell. Redirected or piped logs stay
-uncolored automatically, and the `NO_COLOR` environment variable also disables
-color.
-
-## Configuration
-
-Configuration is merged in this order:
+Configuration is merged in this order, with later values overriding earlier ones:
 
 1. built-in defaults;
 2. `~/.tkn/youtube_note_pipeline/config.yaml`;
@@ -191,18 +56,7 @@ Configuration is merged in this order:
 4. a file passed with `--config`;
 5. individual CLI options.
 
-To create the user-global configuration, copy the committed example and then
-customize it for your environment:
-
-```console
-New-Item -ItemType Directory -Force "$HOME\.tkn\youtube_note_pipeline"
-Copy-Item ".tkn\config.example.yaml" "$HOME\.tkn\youtube_note_pipeline\config.yaml"
-```
-
-For a repository-local override, copy the example to `./.tkn/config.yaml`
-instead.
-
-The example contains:
+The initialized configuration contains:
 
 ```yaml
 raw_root: ~/.tkn/youtube_note_pipeline/data/raw
@@ -214,147 +68,61 @@ model: null
 fallback_languages:
   - en
 codex_executable: codex
-summary_prompt: null
 ```
 
-Ordinary relative output paths are resolved from the current working directory.
-`summary_prompt` has stricter rules:
+Ordinary relative output paths are resolved from the current working directory. Do not commit private machine paths or credentials to a public repository.
 
-- `null` uses the packaged built-in instructions.
-- A filename such as `my-summary.md` resolves below
-  `~/.tkn/youtube_note_pipeline/prompts/`.
-- A prompt elsewhere must use an absolute path; `~` home expansion is accepted.
-- Nested relative values such as `prompts/my-summary.md` are rejected.
+### Output locations
 
-The file must be a non-empty UTF-8 `.md` file with this required Frontmatter:
+| Setting | Stored content |
+| --- | --- |
+| `raw_root` | Retrieved metadata and captions |
+| `source_root` | Markdown notes containing transcripts |
+| `summary_root` | Japanese summary Markdown notes |
+| `reports_root` | JSON run reports |
 
-```yaml
----
-type: prompt
-id: 00000000-0000-4000-8000-000000000001
-version: "1.0"
----
+On Windows, if `codex` resolves to a different executable in an automated process than in an interactive PowerShell session, set `codex_executable` to the absolute path of the working `codex.exe` in a user-global or explicitly passed configuration file.
+
+When `model` is set, that model is used for Codex execution. With `model: null`, Codex selects the model.
+
+## Usage
+
+### Summarize a video
+
+```console
+youtube-notes ingest "https://www.youtube.com/watch?v=VIDEO_ID"
 ```
 
-`id` must be a UUID and remains stable for the lifetime of one prompt. Increment
-the quoted `version` when changing that prompt's instructions. Although a
-correctly formed file can be created manually, `youtube-notes prompt init` is
-recommended because it generates a unique ID. A missing or invalid custom
-prompt stops summary generation instead of silently using the built-in prompt.
-The same resolution applies to `--summary-prompt`, which has the highest normal
-CLI precedence. Do not commit private machine paths or credentials to a public
-repository.
+This retrieves the captions and creates a source note containing the transcript and a Japanese summary note. One invocation accepts one video; playlist and channel URLs are not supported.
 
-Custom Markdown replaces only the human-editable summary instructions. The
-pipeline always appends the title, URL, transcript, transcript-as-untrusted-data
-guardrail, and structured JSON output contract.
+Use `--force` when you intentionally want to regenerate and replace the source and summary notes at the same output locations. `--overwrite` has the same meaning.
 
-Prompt identity controls summary identity:
-
-- A different prompt `id` creates a separate summary file for the same source.
-  Its filename normally uses the first eight UUID hexadecimal characters, for
-  example `_70a1a332.md`; the complete UUID remains authoritative in
-  Frontmatter. If two IDs share that prefix, the filename prefix is extended
-  only as far as needed.
-- Existing summaries are found by matching Frontmatter `url` and `promptId`,
-  not by filename. Existing complete-UUID names and manual renames therefore
-  remain valid and are reused without creating a duplicate.
-- A different `version` with the same `id` regenerates and updates that prompt's
-  existing summary automatically. The summary keeps its `noteId` and `date`,
-  receives a new `updated`, and returns to `reviewStatus: unreviewed`.
-- The same `id` and `version` remains idempotent and returns `unchanged`.
-- `--overwrite` / `--force` remains the explicit way to regenerate without a
-  prompt version change.
-
-The built-in instructions require source attribution, prohibit unsupported
-inference and external knowledge, organize the whole video by topic from
-abstract to concrete, omit nonessential advertising and calls to action, and
-define the expected content of each structured summary field.
-
-### User directory layout
-
-The default user-level layout is:
-
-```text
-~/.tkn/youtube_note_pipeline/
-  config.yaml
-  prompts/
-    summary.md
-  data/
-    raw/
-    source/
-    summary/
-  state/
-    reports/
-
-~/.cache/youtube_note_pipeline/
-  yt-dlp/
+```console
+youtube-notes ingest "https://www.youtube.com/watch?v=VIDEO_ID" --force
 ```
 
-This layout follows the
-[XDG Base Directory Specification](https://specifications.freedesktop.org/basedir-spec/latest/)'s
-separation of configuration, durable data, persistent state, disposable cache,
-and runtime files while retaining fixed, cross-platform locations below the
-user's home directory.
+Because `--force` also replaces reviewed edits, use it only when regeneration is intended. Add `--refresh --force` to retrieve fresh metadata and captions as well.
 
-`config.yaml` is kept directly under the application directory because a
-separate `config/config.yaml` hierarchy would add no useful distinction while
-there is only one configuration file. Raw captures, source notes, and summaries
-are durable user data. User-edited prompt Markdown is a configuration asset kept
-in `prompts/`. Run reports are persistent application state. Disposable cache
-data is stored below `~/.cache/youtube_note_pipeline/`.
+### Other commands
 
-Each generated summary stage records prompt ID, document version, application
-envelope version, source, and SHA-256 in its run report.
+| Command | Purpose |
+| --- | --- |
+| `youtube-notes acquire <video-url>` | Retrieve metadata and captions only |
+| `youtube-notes import-raw --metadata <file> --captions <file>` | Import metadata and captions acquired elsewhere |
+| `youtube-notes build-source <manifest>` | Create a transcript Markdown note from captured captions |
+| `youtube-notes build-summary <source-note>` | Create a summary Markdown note from an existing source note |
+| `youtube-notes validate <artifact>` | Validate a generated artifact |
+| `youtube-notes config show` | Show effective settings and the summary profile |
 
-Provider-only temporary files use Python's platform temporary directory
-resolution (`%TMP%` on Windows and the standard temporary directory on
-Linux). Atomic-write staging files are created next to their destination and
-removed or promoted within the same operation so that replacement stays on one
-filesystem and can remain atomic.
+Run `youtube-notes <command> --help` to see the options for a command.
 
-The former `~/.tkn/youtube-note-pipeline/` directory is not searched. When
-upgrading from an earlier version, move `config.yaml` to the new underscored
-directory and move existing reports below `state/reports/`.
+### Progress logs
 
-On Windows, if `codex` resolves to a different executable in an automated
-process than it does in an interactive PowerShell session, set
-`codex_executable` to the absolute path of the working `codex.exe` in a
-user-global or explicitly passed configuration file.
+Progress is written to standard error and the final JSON result is written to standard output.
 
-When `model` is set, the pipeline passes it to `codex exec --model` and records
-the exact value as `generator: "Codex (<model>)"`. When `model` is `null`, the
-pipeline best-effort detects the effective model reported by the Codex execution
-log. If Codex does not report it, the fallback remains `generator: "Codex"`.
-Set `model` explicitly when a stable, reproducible model selection and label are
-required.
-
-## Raw capture contract
-
-Each capture is stored at:
-
-```text
-<raw-root>/<video-id>/<captured-at>/
-  metadata.info.json
-  captions.<language>.json3
-  manifest.json
-```
-
-The manifest records schema version, hashes, selected caption track, tool
-version, canonical URL, and success or failure. A failed caption acquisition
-does not produce a source or summary note.
-
-Generated source notes remain on Frontmatter `schemaVersion: "1.0"`. New summary
-notes use `type: summary` and `schemaVersion: "4.0"`, include `promptId` and
-`promptVersion`, and omit `nouns` so a separate CLI can assign that metadata.
-Legacy summary schemas 1.0, 2.0, and 3.0 remain valid for existing notes. Both
-notes store the same `cover`; current summaries also place the video embed below
-the title. A current summary description is derived from
-`## 5. Conclusion`; long descriptions are compacted to a bounded single-line
-value. Its shared source description is not modified. A generated summary
-starts with `reviewStatus: unreviewed`. Subsequent validation accepts the review
-workflow states `unreviewed`, `pending`, `reviewing`, `accepted`,
-`needs-revision`, and `rejected`.
+- Default: show normal progress
+- `-q` / `--quiet`: suppress progress and show errors only
+- `-v` / `--verbose`: include detailed diagnostics
 
 ## Development
 
@@ -367,3 +135,49 @@ uv build
 
 Normal tests use synthetic fixtures. Live YouTube and Codex smoke tests are
 explicit operations and are not run in CI.
+
+### Internal processing and artifacts
+
+`ingest` runs these stages in order:
+
+```text
+YouTube URL
+  -> raw metadata, captions, and manifest
+  -> source Markdown containing the transcript
+  -> summary Markdown generated through structured output
+```
+
+Each raw capture is stored below `<raw-root>/<video-id>/<captured-at>/` as `metadata.info.json`, `captions.<language>.json3`, and `manifest.json`. The manifest records schema version, hashes, caption track, tool version, canonical URL, and success or failure. A failed caption acquisition does not produce source or summary notes.
+
+Source notes use Frontmatter `schemaVersion: "1.0"`. New summary notes use `type: summary` and `schemaVersion: "5.0"` and record the IDs, versions, and SHA-256 hashes of the prompt, output schema, and template. Existing summary schemas 1.0, 2.0, 3.0, and 4.0 remain valid. Generation omits `nouns`, while validation permits a separate CLI to add it later.
+
+Summary run reports record the prompt ID, document version, application envelope version, prompt source, and prompt SHA-256. Provider-only files use the platform temporary directory, and artifacts are staged next to their destinations for atomic replacement.
+
+`ingest` and `build-summary` use generative AI. `acquire`, `import-raw`, `build-source`, `validate`, and `config show` are deterministic. Progress uses Python's standard `logging`; interactive output is colored by level and redirected or piped output remains uncolored.
+
+### Application-owned summary profiles
+
+The prompt, output schema, and Markdown template required for summary generation are bundled as one mutually dependent, developer-managed profile. Users cannot select or override the profile or any individual resource through the CLI or configuration. The application currently uses only `default`; a developer can add another summary pattern later as a sibling profile directory.
+
+```text
+src/youtube_note_pipeline/summary_profiles/
+└── default/
+    ├── prompt.md
+    ├── output.schema.json
+    └── template.md
+```
+
+- `prompt.md`: summary quality, source fidelity, and field semantics
+- `output.schema.json`: structured JSON fields, types, and hierarchy returned by the provider
+- `template.md`: final Markdown Frontmatter, headings, ordering, lists, and timestamp links
+
+Python loads the profile as a unit, validates the profile name, each resource's ID, version, and SHA-256, the JSON Schema, and template placeholders, and computes a profile-level SHA-256 from the three member hashes. The safe input envelope, provider execution, provenance, atomic writes, and artifact validation remain application-managed.
+
+Summary-profile provenance is managed as follows:
+
+- Existing summaries are found by matching Frontmatter `url` and `promptId`, not by filename. Existing complete-UUID names and manual renames therefore remain valid and are reused without creating a duplicate.
+- A different `version` with the same built-in prompt `id` regenerates and updates the existing summary automatically. The summary keeps its `noteId` and `date`, receives a new `updated`, and returns to `reviewStatus: unreviewed`.
+- The same prompt ID, version, and SHA-256 returns `unchanged` when the output-schema and template IDs, versions, and SHA-256 hashes also match.
+- If prompt content changes without a version change, or if output-schema or template provenance changes, existing reviewed edits are not replaced automatically; explicit `--overwrite` / `--force` is required.
+
+The built-in instructions require source attribution, prohibit unsupported inference and external knowledge, organize the whole video by topic from abstract to concrete, omit nonessential advertising and calls to action, and define the expected content of each structured summary field.

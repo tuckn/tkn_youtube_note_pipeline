@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal, Self
+from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class StrictModel(BaseModel):
@@ -68,45 +68,3 @@ class SummaryRequest(StrictModel):
     transcript: str
     prompt_version: str
     input_hash: str
-
-
-class SummarySubsection(StrictModel):
-    heading: str
-    details: list[str]
-
-
-class SummarySection(StrictModel):
-    heading: str
-    details: list[str] = Field(
-        description="Direct details used only when a second heading level is unnecessary"
-    )
-    subsections: list[SummarySubsection] = Field(
-        description="Optional H4-level groups below this major H3 section"
-    )
-
-    @model_validator(mode="after")
-    def require_content(self) -> Self:
-        if not self.details and not self.subsections:
-            raise ValueError("a summary section must contain details or subsections")
-        return self
-
-
-class KeyPoint(StrictModel):
-    text: str
-    timestamp_seconds: int | None
-
-
-class SummaryDocument(StrictModel):
-    description: str
-    summary: str
-    structuring: list[SummarySection]
-    key_points: list[KeyPoint]
-    technical_terms: list[str] = Field(
-        description=(
-            "Important terms formatted as Markdown strings in the form "
-            "'**term**: one or two sentences giving a neutral, reusable definition "
-            "grounded in the transcript'; broader video claims and bare terms are "
-            "not allowed"
-        )
-    )
-    conclusion: str

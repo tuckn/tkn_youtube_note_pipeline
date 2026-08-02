@@ -158,6 +158,24 @@ def _summary_target(
     )
 
 
+def _summary_resource_provenance_matches(
+    metadata: dict[str, Any],
+    provider: SummaryProvider,
+) -> bool:
+    profile = provider.profile
+    prompt = profile.prompt
+    expected = {
+        "promptSha256": prompt.sha256,
+        "outputSchemaId": profile.output_schema.resource_id,
+        "outputSchemaVersion": profile.output_schema.version,
+        "outputSchemaSha256": profile.output_schema.sha256,
+        "templateId": profile.template.resource_id,
+        "templateVersion": profile.template.version,
+        "templateSha256": profile.template.sha256,
+    }
+    return all(str(metadata.get(key) or "") == value for key, value in expected.items())
+
+
 def build_summary(
     source_path: Path,
     summary_root: Path,
@@ -169,7 +187,8 @@ def build_summary(
     if source_errors:
         raise ValueError("source validation failed: " + "; ".join(source_errors))
     video = _video_from_source(source_path)
-    prompt = provider.prompt
+    profile = provider.profile
+    prompt = profile.prompt
     target = _summary_target(
         source_path,
         summary_root,
@@ -179,6 +198,7 @@ def build_summary(
     existing_metadata: dict[str, Any] | None = None
     previous_prompt_version: str | None = None
     version_changed = False
+    resources_changed = False
     if target.exists():
         existing_metadata, _ = split_note(target.read_text(encoding="utf-8"))
         if (
@@ -189,7 +209,19 @@ def build_summary(
         else:
             previous_prompt_version = str(existing_metadata.get("promptVersion") or "")
             version_changed = previous_prompt_version != prompt.version
+            uses_resource_provenance = any(
+                key in existing_metadata
+                for key in ("promptSha256", "outputSchemaId", "templateId")
+            )
+            resources_changed = uses_resource_provenance and not (
+                _summary_resource_provenance_matches(existing_metadata, provider)
+            )
             if not overwrite and not version_changed:
+                if resources_changed:
+                    raise FileExistsError(
+                        "summary generation resources changed; use --force to regenerate "
+                        f"and replace {target}"
+                    )
                 if not validate_summary(target):
                     logger.info("Summary note is already current: %s", target)
                     return StageResult(
@@ -199,6 +231,13 @@ def build_summary(
                             "validated": True,
                             "prompt_id": prompt.prompt_id,
                             "prompt_version": prompt.version,
+                            "prompt_sha256": prompt.sha256,
+                            "output_schema_id": profile.output_schema.resource_id,
+                            "output_schema_version": profile.output_schema.version,
+                            "output_schema_sha256": profile.output_schema.sha256,
+                            "template_id": profile.template.resource_id,
+                            "template_version": profile.template.version,
+                            "template_sha256": profile.template.sha256,
                         },
                     )
                 raise FileExistsError(f"summary collision: {target}")
@@ -209,6 +248,8 @@ def build_summary(
                     prompt.version,
                     target,
                 )
+            elif resources_changed:
+                logger.info("Summary generation resources changed; updating %s", target)
     transcript = transcript_from_source(source_path.read_text(encoding="utf-8"))
     input_hash = hashlib.sha256(transcript.encode("utf-8")).hexdigest()
     request = SummaryRequest(
@@ -219,8 +260,24 @@ def build_summary(
     )
     logger.info("Generating structured summary with the configured provider")
     result = provider.generate(request)
-    if result.prompt_id != prompt.prompt_id or result.prompt_version != prompt.version:
-        raise RuntimeError("provider returned prompt provenance that does not match the request")
+    expected_result_provenance = {
+        "prompt_id": prompt.prompt_id,
+        "prompt_version": prompt.version,
+        "prompt_sha256": prompt.sha256,
+        "output_schema_id": profile.output_schema.resource_id,
+        "output_schema_version": profile.output_schema.version,
+        "output_schema_sha256": profile.output_schema.sha256,
+        "template_id": profile.template.resource_id,
+        "template_version": profile.template.version,
+        "template_sha256": profile.template.sha256,
+    }
+    if any(
+        getattr(result, field) != expected
+        for field, expected in expected_result_provenance.items()
+    ):
+        raise RuntimeError(
+            "provider returned generation provenance that does not match the request"
+        )
     logger.info(
         "Summary generation completed with %s",
         result.generator,
@@ -240,8 +297,7 @@ def build_summary(
         result.document,
         now,
         result.generator,
-        prompt.prompt_id,
-        prompt.version,
+        profile,
         note_id=existing_note_id,
         created_at=existing_date,
     )
@@ -263,6 +319,12 @@ def build_summary(
             "prompt_envelope_version": result.prompt_envelope_version,
             "prompt_source": result.prompt_source,
             "prompt_sha256": result.prompt_sha256,
+            "output_schema_id": result.output_schema_id,
+            "output_schema_version": result.output_schema_version,
+            "output_schema_sha256": result.output_schema_sha256,
+            "template_id": result.template_id,
+            "template_version": result.template_version,
+            "template_sha256": result.template_sha256,
             "previous_prompt_version": previous_prompt_version,
             "input_hash": input_hash,
         },
@@ -272,7 +334,7 @@ def build_summary(
 def _provider(config: PipelineConfig) -> SummaryProvider:
     if config.provider != "codex":
         raise ValueError(f"unsupported provider in v1: {config.provider}")
-    return CodexProvider(config.codex_executable, config.model, config.summary_prompt)
+    return CodexProvider(config.codex_executable, config.model)
 
 
 def write_report(

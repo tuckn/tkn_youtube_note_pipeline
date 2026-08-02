@@ -12,16 +12,14 @@ from typing import Any
 import yaml
 
 from youtube_note_pipeline.captions import render_transcript
-from youtube_note_pipeline.models import (
-    RawCaptureManifest,
-    SummaryDocument,
-    TranscriptSegment,
-    VideoSource,
-)
+from youtube_note_pipeline.models import RawCaptureManifest, TranscriptSegment, VideoSource
 from youtube_note_pipeline.naming import path_to_file_uri
+from youtube_note_pipeline.summary_resources import (
+    SummaryProfile,
+    render_summary_template,
+)
 
 SOURCE_NOTE_SCHEMA_VERSION = "1.0"
-SUMMARY_NOTE_SCHEMA_VERSION = "4.0"
 DESCRIPTION_MAX_CHARS = 240
 
 
@@ -154,76 +152,41 @@ def render_source(
     return "\n".join(frontmatter)
 
 
-def _timestamp_url(video: VideoSource, seconds: int) -> str:
-    return f"{video.canonical_url}&t={seconds}s"
+def _timestamp(value: object) -> str:
+    seconds = int(str(value))
+    return f"{seconds // 60}:{seconds % 60:02d}"
 
 
 def render_summary(
     video: VideoSource,
     source_path: Path,
-    document: SummaryDocument,
+    document: dict[str, Any],
     now: datetime,
     generator: str,
-    prompt_id: str,
-    prompt_version: str,
+    profile: SummaryProfile,
     note_id: str | None = None,
     created_at: datetime | None = None,
 ) -> str:
     created = created_at or now
-    lines = [
-        "---",
-        "type: summary",
-        f"schemaVersion: {yaml_quote(SUMMARY_NOTE_SCHEMA_VERSION)}",
-        f"title: {yaml_quote(video.title)}",
-        f"description: {yaml_quote(compact_description(document.conclusion))}",
-        f"cover: {_cover_url(video)}",
-        f"url: {video.canonical_url}",
-        "cliptool: Codex",
-        f"source: {yaml_quote(path_to_file_uri(source_path))}",
-        f"generator: {yaml_quote(generator)}",
-        f"promptId: {prompt_id}",
-        f"promptVersion: {yaml_quote(prompt_version)}",
-        "reviewStatus: unreviewed",
-        f"date: {created.isoformat(timespec='seconds')}",
-        f"updated: {now.isoformat(timespec='seconds')}",
-        f"noteId: {note_id or uuid.uuid4()}",
-        "---",
-        "",
-        f"# {video.title}",
-        "",
-        f"![]({video.canonical_url})",
-        "",
-        "## 1. Summary",
-        "",
-        document.summary,
-        "",
-        "## 2. Structuring (from abstract to concrete)",
-        "",
-    ]
-    for section in document.structuring:
-        lines.extend([f"### {section.heading}", ""])
-        lines.extend(f"- {item}" for item in section.details)
-        if section.details:
-            lines.append("")
-        for subsection in section.subsections:
-            lines.extend(
-                [
-                    f"#### {subsection.heading}",
-                    "",
-                    *(f"- {item}" for item in subsection.details),
-                    "",
-                ]
-            )
-    lines.extend(["## 3. Key points", ""])
-    for point in document.key_points:
-        if point.timestamp_seconds is None:
-            lines.append(f"- {point.text}")
-        else:
-            url = _timestamp_url(video, point.timestamp_seconds)
-            minute = point.timestamp_seconds // 60
-            second = point.timestamp_seconds % 60
-            lines.append(f"- [{minute}:{second:02d}]({url}) {point.text}")
-    lines.extend(["", "## 4. Technical terms", ""])
-    lines.extend(f"- {term}" for term in document.technical_terms)
-    lines.extend(["", "## 5. Conclusion", "", document.conclusion, ""])
-    return "\n".join(lines)
+    context: dict[str, object] = {
+        "cover": _cover_url(video),
+        "created": created.isoformat(timespec="seconds"),
+        "document": document,
+        "generator": generator,
+        "note_id": note_id or str(uuid.uuid4()),
+        "output_schema": profile.output_schema,
+        "prompt": profile.prompt,
+        "source_uri": path_to_file_uri(source_path),
+        "template": profile.template,
+        "updated": now.isoformat(timespec="seconds"),
+        "video": video,
+    }
+    return render_summary_template(
+        profile.template,
+        context,
+        {
+            "compact_description": compact_description,
+            "timestamp": _timestamp,
+            "yaml_quote": yaml_quote,
+        },
+    )

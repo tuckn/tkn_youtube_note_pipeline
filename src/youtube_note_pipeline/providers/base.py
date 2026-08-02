@@ -3,15 +3,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Any, Protocol
 
-from youtube_note_pipeline.models import SummaryDocument, SummaryRequest
-from youtube_note_pipeline.prompting import SummaryPrompt
+from youtube_note_pipeline.models import SummaryRequest
+from youtube_note_pipeline.summary_resources import SummaryProfile
 
 
 @dataclass(frozen=True)
 class ProviderResult:
-    document: SummaryDocument
+    document: dict[str, Any]
     provider: str
     model: str | None
     generator: str
@@ -21,9 +21,15 @@ class ProviderResult:
     prompt_envelope_version: str | None = None
     prompt_source: str | None = None
     prompt_sha256: str | None = None
+    output_schema_id: str | None = None
+    output_schema_version: str | None = None
+    output_schema_sha256: str | None = None
+    template_id: str | None = None
+    template_version: str | None = None
+    template_sha256: str | None = None
 
 
 class SummaryProvider(Protocol):
-    prompt: SummaryPrompt
+    profile: SummaryProfile
 
     def generate(self, request: SummaryRequest) -> ProviderResult: ...

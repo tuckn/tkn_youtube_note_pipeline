@@ -60,77 +60,59 @@ def test_ingest_accepts_overwrite_aliases(option: str) -> None:
     assert args.overwrite is True
 
 
-def test_summary_prompt_cli_option() -> None:
-    args = build_parser().parse_args(
-        [
-            "build-summary",
-            "source.md",
-            "--summary-prompt",
-            "custom.md",
-        ]
-    )
-    assert args.summary_prompt == Path("custom.md")
-
-
-def test_prompt_init_command(tmp_path: Path, monkeypatch, capsys) -> None:
-    prompt_root = tmp_path / "prompts"
-    monkeypatch.setattr(
-        "youtube_note_pipeline.prompting.user_prompts_root",
-        lambda: prompt_root,
-    )
-
-    assert main(["prompt", "init", "my-summary.md", "--quiet"]) == 0
-    payload = json.loads(capsys.readouterr().out)
-    target = prompt_root / "my-summary.md"
-    assert payload["status"] == "created"
-    assert payload["path"] == str(target)
-    assert payload["prompt_version"] == "1.0"
-    assert len(payload["prompt_id"]) == 36
-    assert target.read_text(encoding="utf-8").startswith("---\ntype: prompt\n")
-
-    assert main(["prompt", "init", "my-summary.md", "--quiet"]) == 1
-    assert "refusing to overwrite" in capsys.readouterr().err
-
-
 def test_config_show_reports_prompt_provenance(
     tmp_path: Path, monkeypatch, capsys
 ) -> None:
-    custom = tmp_path / "custom.md"
-    custom.write_text(
-        "---\ntype: prompt\n"
-        "id: 00000000-0000-4000-8000-000000000003\n"
-        'version: "3.0"\n---\n\n'
-        "# Custom\nSummarize decisions.",
-        encoding="utf-8",
-    )
     monkeypatch.setattr(
         "youtube_note_pipeline.config.global_config_path",
         lambda: tmp_path / "missing-global.yaml",
     )
 
-    assert (
-        main(
-            [
-                "config",
-                "show",
-                "--summary-prompt",
-                str(custom),
-                "--quiet",
-            ]
-        )
-        == 0
-    )
+    assert main(["config", "show", "--quiet"]) == 0
     payload = json.loads(capsys.readouterr().out)
-    prompt = payload["values"]["summary_prompt"]
-    assert prompt["configured"] == str(custom)
-    assert prompt["mode"] == "custom"
-    assert prompt["source"] == str(custom)
-    assert prompt["id"] == "00000000-0000-4000-8000-000000000003"
-    assert prompt["version"] == "3.0"
+    profile = payload["values"]["summary_profile"]
+    assert profile["name"] == "default"
+    assert profile["source"].endswith("summary_profiles/default")
+    assert len(profile["sha256"]) == 64
+    prompt = profile["prompt"]
+    assert prompt["source"].endswith("summary_profiles/default/prompt.md")
+    assert prompt["id"] == "70a1a332-fa68-4a6d-9499-d703a17ced3e"
+    assert prompt["version"] == "2.0"
     assert len(prompt["sha256"]) == 64
+    assert profile["output_schema"]["id"] == "8135b54f-cc2e-484d-8616-f07e1ee376da"
+    assert profile["output_schema"]["source"].endswith(
+        "summary_profiles/default/output.schema.json"
+    )
+    assert profile["template"]["id"] == "682b27ed-e542-4795-b295-107dbebe82f4"
+    assert profile["template"]["source"].endswith(
+        "summary_profiles/default/template.md"
+    )
+    assert profile["template"]["note_schema_version"] == "5.0"
 
 
-@pytest.mark.parametrize("name", ["nested/prompt.md", r"nested\prompt.md", "prompt.txt"])
-def test_prompt_init_rejects_invalid_name(name: str, capsys) -> None:
-    assert main(["prompt", "init", name, "--quiet"]) == 1
-    assert "must be a .md filename" in capsys.readouterr().err
+def test_config_init_is_idempotent_and_refuses_edited_file(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    target = tmp_path / "user" / "config.yaml"
+    monkeypatch.setattr(
+        "youtube_note_pipeline.config.global_config_path",
+        lambda: target,
+    )
+
+    assert main(["config", "init", "--quiet"]) == 0
+    created = json.loads(capsys.readouterr().out)
+    assert created == {"status": "created", "path": str(target)}
+    assert "provider: codex" in target.read_text(encoding="utf-8")
+
+    assert main(["config", "show", "--quiet"]) == 0
+    shown = json.loads(capsys.readouterr().out)
+    assert shown["values"]["provider"] == "codex"
+    assert shown["values"]["fallback_languages"] == ["en"]
+
+    assert main(["config", "init", "--quiet"]) == 0
+    unchanged = json.loads(capsys.readouterr().out)
+    assert unchanged == {"status": "unchanged", "path": str(target)}
+
+    target.write_text("provider: edited\n", encoding="utf-8")
+    assert main(["config", "init", "--quiet"]) == 1
+    assert "refusing to overwrite existing configuration" in capsys.readouterr().err
