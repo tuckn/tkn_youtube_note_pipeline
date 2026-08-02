@@ -45,8 +45,6 @@ def canonical_video_url(url: str) -> tuple[str, str]:
         video_id = parsed.path.strip("/").split("/")[0]
     elif host in {"youtube.com", "m.youtube.com"} and parsed.path == "/watch":
         video_id = parse_qs(parsed.query).get("v", [""])[0]
-        if any(key in parse_qs(parsed.query) for key in ("list",)):
-            raise ValueError("playlist URLs are not supported in v1")
     else:
         raise ValueError("v1 accepts a single YouTube watch or youtu.be URL")
     if not VIDEO_ID.fullmatch(video_id):

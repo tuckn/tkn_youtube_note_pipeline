@@ -38,9 +38,18 @@ def test_atomic_write_unchanged_and_collision(tmp_path: Path) -> None:
     assert atomic_write(path, "different", overwrite=True) == "updated"
 
 
-def test_rejects_playlist_url() -> None:
-    with pytest.raises(ValueError, match="playlist"):
-        canonical_video_url("https://www.youtube.com/watch?v=TESTVID0001&list=PL000000000000000")
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://www.youtube.com/watch?v=BZYwXkWURIQ&t=53s",
+        "https://www.youtube.com/watch?v=BZYwXkWURIQ&list=LL&index=5&t=53s&pp=iAQBsAgC",
+    ],
+)
+def test_ignores_watch_url_parameters_after_video_id(url: str) -> None:
+    assert canonical_video_url(url) == (
+        "BZYwXkWURIQ",
+        "https://www.youtube.com/watch?v=BZYwXkWURIQ",
+    )
 
 
 def test_youtube_dl_cache_uses_user_cache_root(tmp_path: Path, monkeypatch) -> None:
