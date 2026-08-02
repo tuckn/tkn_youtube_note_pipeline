@@ -28,27 +28,22 @@ Codex credentials.
 
 ## Install
 
-For an editable installation, which reflects source-code changes without
-reinstallation:
+An editable installation is recommended for normal use. Replace `C:\path\to\tkn_youtube_note_pipeline` with the actual path to this repository. Because the repository path is specified explicitly, these commands can be run from any working directory.
 
 ```console
 uv tool install -e "C:\path\to\tkn_youtube_note_pipeline"
 youtube-notes config show
 ```
 
-Replace the example path with the path to this repository on your computer.
-Because the repository path is specified explicitly, the command can be run
-from any working directory.
+The `-e` (`--editable`) option makes the installed `youtube-notes` command reference the source code in the repository directly. Source-code updates, such as those obtained with `git pull`, therefore take effect without reinstallation. The second command displays the active configuration and confirms that `youtube-notes` can be run after installation.
 
-For a non-editable installation:
+To switch to a non-editable installation that does not automatically reflect changes in the repository, run:
 
 ```console
 uv tool install "C:\path\to\tkn_youtube_note_pipeline" --force
 ```
 
-The non-editable installation does not track subsequent changes to the
-repository. After updating the repository, for example with `git pull`, run the
-same command again to install the updated version.
+A non-editable installation uses the code as it existed at installation time and does not automatically track subsequent repository changes. After updating the repository, for example with `git pull`, run the same command again to make the updated code available to the installed `youtube-notes` command.
 
 ## Commands
 
