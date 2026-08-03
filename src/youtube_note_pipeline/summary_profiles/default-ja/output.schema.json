@@ -1,0 +1,134 @@
+{
+  "type": "output-schema",
+  "id": "8135b54f-cc2e-484d-8616-f07e1ee376da",
+  "version": "1.0",
+  "schema": {
+    "title": "YouTubeSummaryDocument",
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "description": {
+        "type": "string"
+      },
+      "summary": {
+        "type": "string"
+      },
+      "structuring": {
+        "type": "array",
+        "items": {
+          "$ref": "#/$defs/SummarySection"
+        }
+      },
+      "key_points": {
+        "type": "array",
+        "items": {
+          "$ref": "#/$defs/KeyPoint"
+        }
+      },
+      "technical_terms": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "conclusion": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "description",
+      "summary",
+      "structuring",
+      "key_points",
+      "technical_terms",
+      "conclusion"
+    ],
+    "$defs": {
+      "SummarySubsection": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "heading": {
+            "type": "string"
+          },
+          "details": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "heading",
+          "details"
+        ]
+      },
+      "SummarySection": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "heading": {
+            "type": "string"
+          },
+          "details": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "subsections": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/SummarySubsection"
+            }
+          }
+        },
+        "required": [
+          "heading",
+          "details",
+          "subsections"
+        ],
+        "anyOf": [
+          {
+            "properties": {
+              "details": {
+                "minItems": 1
+              }
+            }
+          },
+          {
+            "properties": {
+              "subsections": {
+                "minItems": 1
+              }
+            }
+          }
+        ]
+      },
+      "KeyPoint": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "text": {
+            "type": "string"
+          },
+          "timestamp_seconds": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "text",
+          "timestamp_seconds"
+        ]
+      }
+    }
+  }
+}
+

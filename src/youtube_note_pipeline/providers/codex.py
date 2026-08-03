@@ -13,6 +13,7 @@ from youtube_note_pipeline.models import SummaryRequest
 from youtube_note_pipeline.prompting import render_summary_prompt
 from youtube_note_pipeline.providers.base import ProviderResult
 from youtube_note_pipeline.summary_resources import (
+    DEFAULT_SUMMARY_PROFILE,
     load_summary_profile,
     validate_summary_document,
 )
@@ -31,10 +32,11 @@ class CodexProvider:
         self,
         executable: str = "codex",
         model: str | None = None,
+        summary_profile: str = DEFAULT_SUMMARY_PROFILE,
     ) -> None:
         self.executable = executable
         self.model = model
-        self.profile = load_summary_profile()
+        self.profile = load_summary_profile(summary_profile)
 
     def preflight(self) -> str:
         logger.debug("Running Codex preflight: %s --version", self.executable)

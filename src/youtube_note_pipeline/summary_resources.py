@@ -18,7 +18,8 @@ from jsonschema.exceptions import SchemaError
 
 from youtube_note_pipeline.prompting import SummaryPrompt, parse_summary_prompt
 
-DEFAULT_SUMMARY_PROFILE = "default"
+DEFAULT_SUMMARY_PROFILE = "default-ja"
+BUILT_IN_SUMMARY_PROFILES = ("default-ja", "default-en")
 SUMMARY_PROFILES_ROOT = "summary_profiles"
 PROMPT_FILENAME = "prompt.md"
 OUTPUT_SCHEMA_FILENAME = "output.schema.json"

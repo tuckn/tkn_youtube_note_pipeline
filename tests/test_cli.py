@@ -70,24 +70,37 @@ def test_config_show_reports_prompt_provenance(
 
     assert main(["config", "show", "--quiet"]) == 0
     payload = json.loads(capsys.readouterr().out)
-    profile = payload["values"]["summary_profile"]
-    assert profile["name"] == "default"
-    assert profile["source"].endswith("summary_profiles/default")
+    assert payload["values"]["summary_profile"] == "default-ja"
+    profile = payload["values"]["summary_profile_details"]
+    assert profile["name"] == "default-ja"
+    assert profile["source"].endswith("summary_profiles/default-ja")
     assert len(profile["sha256"]) == 64
     prompt = profile["prompt"]
-    assert prompt["source"].endswith("summary_profiles/default/prompt.md")
+    assert prompt["source"].endswith("summary_profiles/default-ja/prompt.md")
     assert prompt["id"] == "70a1a332-fa68-4a6d-9499-d703a17ced3e"
     assert prompt["version"] == "2.0"
     assert len(prompt["sha256"]) == 64
     assert profile["output_schema"]["id"] == "8135b54f-cc2e-484d-8616-f07e1ee376da"
     assert profile["output_schema"]["source"].endswith(
-        "summary_profiles/default/output.schema.json"
+        "summary_profiles/default-ja/output.schema.json"
     )
     assert profile["template"]["id"] == "682b27ed-e542-4795-b295-107dbebe82f4"
     assert profile["template"]["source"].endswith(
-        "summary_profiles/default/template.md"
+        "summary_profiles/default-ja/template.md"
     )
     assert profile["template"]["note_schema_version"] == "5.0"
+
+
+def test_config_show_uses_summary_profile_cli_override(tmp_path: Path, monkeypatch, capsys) -> None:
+    monkeypatch.setattr(
+        "youtube_note_pipeline.config.global_config_path",
+        lambda: tmp_path / "missing-global.yaml",
+    )
+
+    assert main(["config", "show", "--summary-profile", "default-en", "--quiet"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["values"]["summary_profile"] == "default-en"
+    assert payload["values"]["summary_profile_details"]["name"] == "default-en"
 
 
 def test_config_init_is_idempotent_and_refuses_edited_file(
@@ -103,6 +116,7 @@ def test_config_init_is_idempotent_and_refuses_edited_file(
     created = json.loads(capsys.readouterr().out)
     assert created == {"status": "created", "path": str(target)}
     assert "provider: codex" in target.read_text(encoding="utf-8")
+    assert "summary_profile: default-ja" in target.read_text(encoding="utf-8")
 
     assert main(["config", "show", "--quiet"]) == 0
     shown = json.loads(capsys.readouterr().out)

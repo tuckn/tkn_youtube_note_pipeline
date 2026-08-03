@@ -2,7 +2,7 @@
 
 [日本語](README_ja.md)
 
-`tkn_youtube_note_pipeline` is a CLI that summarizes YouTube videos in Japanese and saves the result as Markdown notes.
+`tkn_youtube_note_pipeline` is a CLI that summarizes YouTube videos in Japanese or English and saves the result as Markdown notes. Japanese is the default.
 
 For normal use, pass a video URL to one command:
 
@@ -65,6 +65,7 @@ summary_root: ~/.tkn/youtube_note_pipeline/data/summary
 reports_root: ~/.tkn/youtube_note_pipeline/state/reports
 provider: codex
 model: null
+summary_profile: default-ja
 fallback_languages:
   - en
 codex_executable: codex
@@ -78,12 +79,14 @@ Ordinary relative output paths are resolved from the current working directory. 
 | --- | --- |
 | `raw_root` | Retrieved metadata and captions |
 | `source_root` | Markdown notes containing transcripts |
-| `summary_root` | Japanese summary Markdown notes |
+| `summary_root` | Summary Markdown notes |
 | `reports_root` | JSON run reports |
 
 On Windows, if `codex` resolves to a different executable in an automated process than in an interactive PowerShell session, set `codex_executable` to the absolute path of the working `codex.exe` in a user-global or explicitly passed configuration file.
 
 When `model` is set, that model is used for Codex execution. With `model: null`, Codex selects the model.
+
+`summary_profile` selects the summary language: `default-ja` for Japanese or `default-en` for English. Set it in configuration for normal use, or pass `--summary-profile default-en` to override it for one command.
 
 ## Usage
 
@@ -93,7 +96,13 @@ When `model` is set, that model is used for Codex execution. With `model: null`,
 youtube-notes ingest "https://www.youtube.com/watch?v=VIDEO_ID"
 ```
 
-This retrieves the captions and creates a source note containing the transcript and a Japanese summary note. One invocation accepts one video; playlist and channel URLs are not supported.
+This retrieves the captions and creates a source note containing the transcript and a summary note in the selected profile's language. One invocation accepts one video; playlist and channel URLs are not supported.
+
+To create an English summary, change `summary_profile` in configuration or run:
+
+```console
+youtube-notes ingest "https://www.youtube.com/watch?v=VIDEO_ID" --summary-profile default-en
+```
 
 Use `--force` when you intentionally want to regenerate and replace the source and summary notes at the same output locations. `--overwrite` has the same meaning.
 
@@ -151,17 +160,21 @@ Each raw capture is stored below `<raw-root>/<video-id>/<captured-at>/` as `meta
 
 Source notes use Frontmatter `schemaVersion: "1.0"`. New summary notes use `type: summary` and `schemaVersion: "5.0"` and record the IDs, versions, and SHA-256 hashes of the prompt, output schema, and template. Existing summary schemas 1.0, 2.0, 3.0, and 4.0 remain valid. Generation omits `nouns`, while validation permits a separate CLI to add it later.
 
-Summary run reports record the prompt ID, document version, application envelope version, prompt source, and prompt SHA-256. Provider-only files use the platform temporary directory, and artifacts are staged next to their destinations for atomic replacement.
+Summary run reports record the selected profile name and SHA-256, prompt ID, document version, application envelope version, prompt source, and prompt SHA-256. Provider-only files use the platform temporary directory, and artifacts are staged next to their destinations for atomic replacement.
 
 `ingest` and `build-summary` use generative AI. `acquire`, `import-raw`, `build-source`, `validate`, and `config show` are deterministic. Progress uses Python's standard `logging`; interactive output is colored by level and redirected or piped output remains uncolored.
 
 ### Application-owned summary profiles
 
-The prompt, output schema, and Markdown template required for summary generation are bundled as one mutually dependent, developer-managed profile. Users cannot select or override the profile or any individual resource through the CLI or configuration. The application currently uses only `default`; a developer can add another summary pattern later as a sibling profile directory.
+The prompt, output schema, and Markdown template required for summary generation are bundled as one mutually dependent, developer-managed profile. A built-in profile can be selected through configuration or the CLI, but individual resources and arbitrary custom prompts cannot be supplied. The application includes `default-ja` for Japanese and `default-en` for English; developers can add another summary pattern as a sibling profile directory.
 
 ```text
 src/youtube_note_pipeline/summary_profiles/
-└── default/
+├── default-ja/
+│   ├── prompt.md
+│   ├── output.schema.json
+│   └── template.md
+└── default-en/
     ├── prompt.md
     ├── output.schema.json
     └── template.md

@@ -76,3 +76,4 @@ claims, reasoning, concrete examples, and conclusion without watching it.
 
 Timestamps must refer only to timestamps present in the transcript. Never
 invent, interpolate, or assign a timestamp based only on topic order.
+

@@ -16,6 +16,7 @@ from youtube_note_pipeline.naming import (
     file_uri_to_path,
     path_to_file_uri,
 )
+from youtube_note_pipeline.pipeline import provider_for_config
 
 
 def test_config_precedence(tmp_path: Path, monkeypatch) -> None:
@@ -67,6 +68,32 @@ def test_removed_summary_prompt_config_is_rejected(
     explicit.write_text("summary_prompt: custom.md\n", encoding="utf-8")
 
     with pytest.raises(ValueError, match="summary_prompt"):
+        resolve_config(cwd=tmp_path, explicit_config=explicit)
+
+
+def test_summary_profile_can_be_selected_from_config(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr(
+        "youtube_note_pipeline.config.global_config_path",
+        lambda: tmp_path / "missing-global.yaml",
+    )
+    explicit = tmp_path / "explicit.yaml"
+    explicit.write_text("summary_profile: default-en\n", encoding="utf-8")
+
+    resolved = resolve_config(cwd=tmp_path, explicit_config=explicit)
+
+    assert resolved.config.summary_profile == "default-en"
+    assert provider_for_config(resolved.config).profile.name == "default-en"
+
+
+def test_unknown_summary_profile_is_rejected(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr(
+        "youtube_note_pipeline.config.global_config_path",
+        lambda: tmp_path / "missing-global.yaml",
+    )
+    explicit = tmp_path / "explicit.yaml"
+    explicit.write_text("summary_profile: custom\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="summary_profile must be one of"):
         resolve_config(cwd=tmp_path, explicit_config=explicit)
 
 

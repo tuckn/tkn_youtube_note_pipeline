@@ -27,7 +27,7 @@ def test_built_in_prompt_is_non_empty_and_rendered_with_fixed_envelope() -> None
     assert prompt.prompt_id == "70a1a332-fa68-4a6d-9499-d703a17ced3e"
     assert prompt.version == "2.0"
     assert prompt.source == (
-        "package:youtube_note_pipeline/summary_profiles/default/prompt.md"
+        "package:youtube_note_pipeline/summary_profiles/default-ja/prompt.md"
     )
     assert len(prompt.sha256) == 64
     assert prompt.instructions.startswith("# Default YouTube summary instructions")

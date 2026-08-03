@@ -8,7 +8,12 @@ from pathlib import Path
 from typing import Any
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from youtube_note_pipeline.summary_resources import (
+    BUILT_IN_SUMMARY_PROFILES,
+    DEFAULT_SUMMARY_PROFILE,
+)
 
 APP_DIRECTORY = "youtube_note_pipeline"
 DEFAULT_CONFIG_RESOURCE = "resources/config.example.yaml"
@@ -23,8 +28,17 @@ class PipelineConfig(BaseModel):
     reports_root: Path
     provider: str = "codex"
     model: str | None = None
+    summary_profile: str = DEFAULT_SUMMARY_PROFILE
     fallback_languages: list[str] = Field(default_factory=list)
     codex_executable: str = "codex"
+
+    @field_validator("summary_profile")
+    @classmethod
+    def validate_summary_profile(cls, value: str) -> str:
+        if value not in BUILT_IN_SUMMARY_PROFILES:
+            allowed = ", ".join(BUILT_IN_SUMMARY_PROFILES)
+            raise ValueError(f"summary_profile must be one of: {allowed}")
+        return value
 
 
 class ResolvedConfig(BaseModel):
@@ -57,6 +71,7 @@ def default_values() -> dict[str, Any]:
         "reports_root": user_state_root() / "reports",
         "provider": "codex",
         "model": None,
+        "summary_profile": DEFAULT_SUMMARY_PROFILE,
         "fallback_languages": [],
         "codex_executable": "codex",
     }
@@ -153,6 +168,7 @@ def public_config(config: PipelineConfig) -> dict[str, Any]:
         "reports_root": str(config.reports_root),
         "provider": config.provider,
         "model": config.model,
+        "summary_profile": config.summary_profile,
         "fallback_languages": config.fallback_languages,
         "codex_executable": config.codex_executable,
     }

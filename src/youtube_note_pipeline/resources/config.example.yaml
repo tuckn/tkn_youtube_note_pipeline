@@ -5,6 +5,7 @@ reports_root: ~/.tkn/youtube_note_pipeline/state/reports
 
 provider: codex
 model: null
+summary_profile: default-ja
 fallback_languages:
   - en
 codex_executable: codex

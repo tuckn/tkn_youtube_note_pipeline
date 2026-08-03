@@ -229,6 +229,9 @@ def build_summary(
                         "unchanged",
                         {
                             "validated": True,
+                            "summary_profile": profile.name,
+                            "summary_profile_source": profile.source,
+                            "summary_profile_sha256": profile.sha256,
                             "prompt_id": prompt.prompt_id,
                             "prompt_version": prompt.version,
                             "prompt_sha256": prompt.sha256,
@@ -311,6 +314,9 @@ def build_summary(
         status,
         {
             "validated": True,
+            "summary_profile": profile.name,
+            "summary_profile_source": profile.source,
+            "summary_profile_sha256": profile.sha256,
             "provider": result.provider,
             "model": result.model,
             "provider_version": result.provider_version,
@@ -334,7 +340,7 @@ def build_summary(
 def _provider(config: PipelineConfig) -> SummaryProvider:
     if config.provider != "codex":
         raise ValueError(f"unsupported provider in v1: {config.provider}")
-    return CodexProvider(config.codex_executable, config.model)
+    return CodexProvider(config.codex_executable, config.model, config.summary_profile)
 
 
 def write_report(

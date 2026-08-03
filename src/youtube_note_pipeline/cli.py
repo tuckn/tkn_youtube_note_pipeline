@@ -20,7 +20,10 @@ from youtube_note_pipeline.pipeline import (
     run_import,
     write_report,
 )
-from youtube_note_pipeline.summary_resources import load_summary_profile
+from youtube_note_pipeline.summary_resources import (
+    BUILT_IN_SUMMARY_PROFILES,
+    load_summary_profile,
+)
 from youtube_note_pipeline.validation import validate_path
 
 logger = logging.getLogger(__name__)
@@ -40,6 +43,7 @@ def _common(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--summary-root", type=Path)
     parser.add_argument("--reports-root", type=Path)
     parser.add_argument("--model")
+    parser.add_argument("--summary-profile", choices=BUILT_IN_SUMMARY_PROFILES)
     _verbosity(parser)
 
 
@@ -138,6 +142,7 @@ def _resolved(args: argparse.Namespace) -> Any:
             "summary_root",
             "reports_root",
             "model",
+            "summary_profile",
         )
     }
     return resolve_config(explicit_config=getattr(args, "config", None), overrides=overrides)
@@ -166,10 +171,10 @@ def main(argv: list[str] | None = None) -> int:
         logger.debug("Configuration sources: %s", ", ".join(resolved.sources))
         if args.command == "config":
             logger.info("Showing resolved configuration")
-            profile = load_summary_profile()
+            profile = load_summary_profile(config.summary_profile)
             prompt = profile.prompt
             values = public_config(config)
-            values["summary_profile"] = {
+            values["summary_profile_details"] = {
                 "name": profile.name,
                 "source": profile.source,
                 "sha256": profile.sha256,

@@ -2,7 +2,7 @@
 
 [English](README.md)
 
-`tkn_youtube_note_pipeline`は、YouTube動画の内容を日本語で要約し、Markdownノートとして保存するCLIです。
+`tkn_youtube_note_pipeline`は、YouTube動画の内容を日本語または英語で要約し、Markdownノートとして保存するCLIです。既定では日本語で要約します。
 
 通常は、動画URLを指定して次の1コマンドを実行します。
 
@@ -65,6 +65,7 @@ summary_root: ~/.tkn/youtube_note_pipeline/data/summary
 reports_root: ~/.tkn/youtube_note_pipeline/state/reports
 provider: codex
 model: null
+summary_profile: default-ja
 fallback_languages:
   - en
 codex_executable: codex
@@ -78,12 +79,14 @@ codex_executable: codex
 | --- | --- |
 | `raw_root` | 取得したmetadataと字幕 |
 | `source_root` | 字幕全文を含むMarkdownノート |
-| `summary_root` | 日本語の要約Markdownノート |
+| `summary_root` | 要約Markdownノート |
 | `reports_root` | 実行結果のJSON report |
 
 Windowsで自動処理とinteractive PowerShellが異なる`codex`を解決する場合は、user-global configまたは`--config`で渡す設定の`codex_executable`に、動作する`codex.exe`のabsolute pathを指定してください。
 
 `model`を指定すると、そのmodelをCodexの実行に使用します。`model: null`ではCodexが選択したmodelを使用します。
+
+`summary_profile`は要約の出力言語を指定します。`default-ja`は日本語、`default-en`は英語です。通常はconfigで指定し、1回の実行だけ変更する場合は`--summary-profile default-en`を使用できます。
 
 ## 使い方
 
@@ -93,7 +96,13 @@ Windowsで自動処理とinteractive PowerShellが異なる`codex`を解決す�
 youtube-notes ingest "https://www.youtube.com/watch?v=VIDEO_ID"
 ```
 
-字幕を取得し、字幕全文のMarkdownノートと日本語の要約Markdownノートを作成します。1回の実行で指定できるのは1本の動画です。playlist URLとchannel URLには対応していません。
+字幕を取得し、字幕全文のMarkdownノートと、選択したprofileの言語による要約Markdownノートを作成します。1回の実行で指定できるのは1本の動画です。playlist URLとchannel URLには対応していません。
+
+英語で要約する場合は、configの`summary_profile`を変更するか、次のように指定します。
+
+```console
+youtube-notes ingest "https://www.youtube.com/watch?v=VIDEO_ID" --summary-profile default-en
+```
 
 同じ保存先のsourceノートとsummaryノートを意図的に再生成して置き換える場合は、`--force`を指定します。`--overwrite`も同じ意味です。
 
@@ -151,17 +160,21 @@ YouTube URL
 
 sourceノートはFrontmatter `schemaVersion: "1.0"`を使用します。新しいsummaryノートは`type: summary`と`schemaVersion: "5.0"`を使用し、prompt・output schema・templateのID、version、SHA-256を記録します。既存summaryのschema 1.0、2.0、3.0、4.0も引き続き検証できます。`nouns`は生成時に登録せず、別のCLIによる付与を許可します。
 
-summary生成stageのrun reportには、prompt ID、document version、application envelope version、prompt source、prompt SHA-256を記録します。provider用の一時ファイルにはplatformのtemp directoryを使用し、artifactは保存先の隣でstagingしてatomicに置き換えます。
+summary生成stageのrun reportには、選択したprofile名とSHA-256、prompt ID、document version、application envelope version、prompt source、prompt SHA-256を記録します。provider用の一時ファイルにはplatformのtemp directoryを使用し、artifactは保存先の隣でstagingしてatomicに置き換えます。
 
 生成AIを使うコマンドは`ingest`と`build-summary`です。`acquire`、`import-raw`、`build-source`、`validate`、`config show`はdeterministicな処理です。進捗ログはPython標準の`logging`を使用し、interactive terminalではlevelに応じて色を付け、redirectまたはpipe時は無色にします。
 
 ### Application-ownedな要約profile
 
-要約生成に必要なprompt、output schema、Markdown templateは、相互に依存する1つのdeveloper-managed profileとしてまとめています。ユーザーはprofileや個別resourceをCLI・configから選択または上書きできません。現在は`default`だけを使用し、将来、開発者が別の要約patternを追加する場合は同じ階層へprofile directoryを追加できます。
+要約生成に必要なprompt、output schema、Markdown templateは、相互に依存する1つのdeveloper-managed profileとしてまとめています。組み込みprofileはconfigまたはCLIから選択できますが、個別resourceや任意のcustom promptは指定できません。日本語用の`default-ja`と英語用の`default-en`を提供し、開発者が別の要約patternを追加する場合は同じ階層へprofile directoryを追加できます。
 
 ```text
 src/youtube_note_pipeline/summary_profiles/
-└── default/
+├── default-ja/
+│   ├── prompt.md
+│   ├── output.schema.json
+│   └── template.md
+└── default-en/
     ├── prompt.md
     ├── output.schema.json
     └── template.md

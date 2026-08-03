@@ -133,6 +133,8 @@ def test_full_synthetic_pipeline_and_idempotency(tmp_path: Path) -> None:
     assert summary.details["prompt_version"] == "1.0"
     assert summary.details["prompt_envelope_version"] == "youtube-summary-envelope-v1"
     assert summary.details["prompt_source"] == "test:fixture.md"
+    assert summary.details["summary_profile"] == "test"
+    assert summary.details["summary_profile_sha256"] == "2" * 64
     assert summary.details["prompt_sha256"] == "1" * 64
     assert validate_summary(summary.path, tmp_path / "source") == []
     assert build_summary(source.path, tmp_path / "summary", FakeProvider()).status == "unchanged"

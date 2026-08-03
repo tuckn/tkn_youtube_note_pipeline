@@ -55,7 +55,7 @@ def test_codex_structured_output(monkeypatch) -> None:
     assert result.generator == "Codex (gpt-test)"
     assert result.document["summary"] == "要約"
     assert result.prompt_source == (
-        "package:youtube_note_pipeline/summary_profiles/default/prompt.md"
+        "package:youtube_note_pipeline/summary_profiles/default-ja/prompt.md"
     )
     assert result.prompt_id == "70a1a332-fa68-4a6d-9499-d703a17ced3e"
     assert result.prompt_version == "2.0"
@@ -63,6 +63,13 @@ def test_codex_structured_output(monkeypatch) -> None:
     assert result.prompt_sha256 is not None
     assert result.output_schema_id == "8135b54f-cc2e-484d-8616-f07e1ee376da"
     assert result.template_id == "682b27ed-e542-4795-b295-107dbebe82f4"
+
+
+def test_codex_provider_selects_english_summary_profile() -> None:
+    provider = CodexProvider(summary_profile="default-en")
+
+    assert provider.profile.name == "default-en"
+    assert "source-faithful English summary" in provider.profile.prompt.instructions
 
 
 def test_codex_schema_requires_nullable_and_empty_list_fields(monkeypatch) -> None:
