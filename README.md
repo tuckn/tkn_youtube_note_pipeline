@@ -20,22 +20,29 @@ The Python `yt-dlp` package is installed automatically as a dependency, so the s
 
 ## Install
 
-An editable installation is recommended for normal use. Replace `C:\path\to\tkn_youtube_note_pipeline` with the actual path to this repository.
+Install the repository with the following command. Replace `C:\path\to\tkn_youtube_note_pipeline` with the actual path to this repository.
 
 ```console
-uv tool install -e "C:\path\to\tkn_youtube_note_pipeline"
+uv tool install "C:\path\to\tkn_youtube_note_pipeline"
 youtube-notes config show
 ```
 
-The `-e` (`--editable`) option makes the installed `youtube-notes` command reference the source code in the repository directly. Source-code updates, such as those obtained with `git pull`, therefore take effect without reinstallation. The second command displays the active configuration and confirms that `youtube-notes` can be run after installation.
+The second command displays the active configuration and confirms that `youtube-notes` can be run after installation. This installation uses the code as it existed when the command was run and does not automatically track later repository changes.
 
-To switch to a non-editable installation that does not automatically reflect changes in the repository, run:
+Reinstall after every repository update, such as after `git pull`, to make the updated code and dependencies available to the installed command:
 
 ```console
 uv tool install "C:\path\to\tkn_youtube_note_pipeline" --force
+youtube-notes config show
 ```
 
-A non-editable installation uses the code as it existed at installation time and does not automatically track subsequent repository changes. After updating the repository, for example with `git pull`, run the same command again to make the updated code available to the installed `youtube-notes` command.
+For development, an editable installation can be used instead:
+
+```console
+uv tool install -e "C:\path\to\tkn_youtube_note_pipeline" --force
+```
+
+The `-e` (`--editable`) option makes the installed command reference the repository source code directly, so source-code edits take effect without reinstallation. If an update adds or changes dependency modules in `pyproject.toml` or `uv.lock`, reinstall with the same editable command and `--force` so that the tool environment is updated too.
 
 ## Configuration
 

@@ -20,22 +20,29 @@ Python版`yt-dlp`はdependencyとして自動的にインストールされる�
 
 ## インストール
 
-通常は、次のコマンドでeditable installationを行います。例示している`C:\path\to\tkn_youtube_note_pipeline`は、このリポジトリの実際のフォルダパスに置き換えてください。
+次のコマンドでインストールします。例示している`C:\path\to\tkn_youtube_note_pipeline`は、このリポジトリの実際のフォルダパスに置き換えてください。
 
 ```console
-uv tool install -e "C:\path\to\tkn_youtube_note_pipeline"
+uv tool install "C:\path\to\tkn_youtube_note_pipeline"
 youtube-notes config show
 ```
 
-`-e`（`--editable`）を指定すると、インストールされた`youtube-notes`はリポジトリ内のソースコードを直接参照します。そのため、`git pull`などでソースコードを更新しても、再インストールせずに変更が反映されます。2つ目のコマンドは、インストール後に現在の設定を表示し、`youtube-notes`を実行できることを確認します。
+2つ目のコマンドは、インストール後に現在の設定を表示し、`youtube-notes`を実行できることを確認します。この方式では、インストール時点のコードが使用され、その後のリポジトリの変更は自動的に反映されません。
 
-リポジトリ内の変更を自動的に反映しないnon-editable installationへ切り替える場合は、次のコマンドを実行します。
+`git pull`などでリポジトリを更新するたびに、更新後のコードと依存モジュールをインストール済みのコマンドへ反映するため、次のコマンドで再インストールしてください。
 
 ```console
 uv tool install "C:\path\to\tkn_youtube_note_pipeline" --force
+youtube-notes config show
 ```
 
-non-editable installationでは、インストール時点のコードが使用され、その後のリポジトリの変更は自動的に反映されません。`git pull`などでリポジトリを更新した後、変更をインストール済みの`youtube-notes`へ反映するには、同じコマンドを再度実行してください。
+開発時には、代わりにeditable installationを使用できます。
+
+```console
+uv tool install -e "C:\path\to\tkn_youtube_note_pipeline" --force
+```
+
+`-e`（`--editable`）を指定すると、インストールされたコマンドはリポジトリ内のソースコードを直接参照するため、ソースコードの変更は再インストールせずに反映されます。ただし、更新によって`pyproject.toml`または`uv.lock`の依存モジュールが追加・変更された場合は、tool環境にも反映するため、同じeditable installationのコマンドを`--force`付きで再実行してください。
 
 ## 設定
 

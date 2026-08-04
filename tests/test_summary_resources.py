@@ -1,6 +1,14 @@
+import json
+from pathlib import Path
+
 import pytest
 
-from youtube_note_pipeline.summary_resources import load_summary_profile
+from youtube_note_pipeline.summary_resources import (
+    load_summary_profile,
+    validate_summary_document,
+)
+
+FIXTURES = Path(__file__).parent / "fixtures"
 
 
 def test_packaged_default_summary_profile_is_versioned_and_bundled() -> None:
@@ -12,9 +20,7 @@ def test_packaged_default_summary_profile_is_versioned_and_bundled() -> None:
     assert profile.prompt.source.endswith("summary_profiles/default-ja/prompt.md")
     assert profile.output_schema.resource_id == "8135b54f-cc2e-484d-8616-f07e1ee376da"
     assert profile.output_schema.version == "1.0"
-    assert profile.output_schema.source.endswith(
-        "summary_profiles/default-ja/output.schema.json"
-    )
+    assert profile.output_schema.source.endswith("summary_profiles/default-ja/output.schema.json")
     assert set(profile.output_schema.schema["required"]) == set(
         profile.output_schema.schema["properties"]
     )
@@ -22,10 +28,7 @@ def test_packaged_default_summary_profile_is_versioned_and_bundled() -> None:
     assert profile.template.version == "1.0"
     assert profile.template.note_schema_version == "5.0"
     assert profile.template.source.endswith("summary_profiles/default-ja/template.md")
-    assert all(
-        heading in profile.template.body
-        for heading in profile.template.required_headings
-    )
+    assert all(heading in profile.template.body for heading in profile.template.required_headings)
 
 
 def test_english_profile_has_distinct_language_prompt_and_shared_contract() -> None:
@@ -39,6 +42,14 @@ def test_english_profile_has_distinct_language_prompt_and_shared_contract() -> N
     assert english.output_schema.sha256 == japanese.output_schema.sha256
     assert english.template.sha256 == japanese.template.sha256
     assert english.sha256 != japanese.sha256
+
+
+def test_provider_golden_document_matches_built_in_output_contracts() -> None:
+    document = json.loads((FIXTURES / "summary_document.golden.json").read_text(encoding="utf-8"))
+
+    for profile_name in ("default-ja", "default-en"):
+        profile = load_summary_profile(profile_name)
+        assert validate_summary_document(document, profile.output_schema) == document
 
 
 @pytest.mark.parametrize("name", ["Default", "../default", "default/profile", ""])
