@@ -89,6 +89,10 @@ codex_executable: codex
 | `summary_root` | 要約Markdownノート |
 | `reports_root` | 実行結果のJSON report |
 
+既定の`~/.tkn/youtube_note_pipeline/state/`は、`data/`に保存するraw captureやMarkdownノートとは分離して、pipelineの運用状態を置くためのdirectoryです。現行versionでは`reports/`だけを使用し、`ingest`、`acquire`、`import-raw`、`build-source`、`build-summary`の実行ごとに、status、error、各stageの出力pathとdetailsを含むJSON run reportを保存します。providerが失敗した場合は、完全なsubprocess診断を同じdirectoryの`*.provider.log`へ分離して保存します。
+
+これらのreportは後続処理の入力には使用されません。削除すると過去の実行履歴と失敗時の詳細診断は失われますが、raw capture、sourceノート、summaryノートには影響せず、次にreportを出力するコマンドを実行したときに`reports/`が再作成されます。`reports_root`を変更した場合は、reportと診断logの保存先もそのdirectoryへ移ります。
+
 Windowsで自動処理とinteractive PowerShellが異なる`codex`を解決する場合は、user-global configまたは`--config`で渡す設定の`codex_executable`に、動作する`codex.exe`のabsolute pathを指定してください。
 
 `model`を指定すると、そのmodelをCodexの実行に使用します。`model: null`ではCodexが選択したmodelを使用します。
@@ -123,6 +127,7 @@ youtube-notes ingest "https://www.youtube.com/watch?v=VIDEO_ID" --force
 
 | コマンド | 用途 |
 | --- | --- |
+| `youtube-notes list` | 取得済み文字起こしと対応するsource・summaryノートをJSONで一覧表示 |
 | `youtube-notes acquire <video-url>` | metadataと字幕だけを取得 |
 | `youtube-notes import-raw --metadata <file> --captions <file>` | 別の方法で取得したmetadataと字幕を取り込み |
 | `youtube-notes build-source <manifest>` | 取得済み字幕から字幕全文のMarkdownノートを作成 |
@@ -131,6 +136,8 @@ youtube-notes ingest "https://www.youtube.com/watch?v=VIDEO_ID" --force
 | `youtube-notes config show` | 有効な設定とsummary profileを表示 |
 
 各コマンドのoptionは`youtube-notes <command> --help`で確認できます。
+
+`youtube-notes list`は動画ごとに1件を、最新の取得日時から順に返します。各itemには、最新のmanifest・字幕path、成功した取得回数、同じcanonical video URLを持つすべてのsource・summaryノートが含まれます。まだ後続ノートを作成していない取得結果も、空のノート一覧として表示します。読み取れないmanifestやノートは、有効なitemを隠さずtop-levelの`warnings`配列で報告します。
 
 ### 進捗ログ
 
@@ -173,7 +180,7 @@ sourceノートはFrontmatter `schemaVersion: "1.0"`を使用します。新し�
 
 summary生成stageのrun reportには、選択したprofile名とSHA-256、prompt ID、document version、application envelope version、prompt source、prompt SHA-256を記録します。providerが失敗した場合、reportの`error`は短い要点に限定し、完全なsubprocess診断は`diagnostic_log`が示す別ファイルへ保存します。provider用の一時ファイルにはplatformのtemp directoryを使用し、artifactは保存先の隣でstagingしてatomicに置き換えます。
 
-生成AIを使うコマンドは`ingest`と`build-summary`です。`acquire`、`import-raw`、`build-source`、`validate`、`config show`はdeterministicな処理です。進捗ログはPython標準の`logging`を使用し、interactive terminalではlevelに応じて色を付け、redirectまたはpipe時は無色にします。
+生成AIを使うコマンドは`ingest`と`build-summary`です。`list`、`acquire`、`import-raw`、`build-source`、`validate`、`config show`はdeterministicな処理です。進捗ログはPython標準の`logging`を使用し、interactive terminalではlevelに応じて色を付け、redirectまたはpipe時は無色にします。
 
 ### Application-ownedな要約profile
 

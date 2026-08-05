@@ -89,6 +89,10 @@ Ordinary relative output paths are resolved from the current working directory. 
 | `summary_root` | Summary Markdown notes |
 | `reports_root` | JSON run reports |
 
+The default `~/.tkn/youtube_note_pipeline/state/` directory holds operational pipeline state separately from raw captures and Markdown notes under `data/`. The current version uses only `reports/`. Each `ingest`, `acquire`, `import-raw`, `build-source`, and `build-summary` run writes a JSON run report containing its status, error, and the output path and details for each stage. A provider failure stores the complete subprocess diagnostics separately as a `*.provider.log` file in the same directory.
+
+These reports are not inputs to later pipeline runs. Deleting them removes the execution history and detailed failure diagnostics but does not affect raw captures, source notes, or summary notes; `reports/` is created again the next time a command writes a report. Changing `reports_root` moves both reports and diagnostic logs to that directory.
+
 On Windows, if `codex` resolves to a different executable in an automated process than in an interactive PowerShell session, set `codex_executable` to the absolute path of the working `codex.exe` in a user-global or explicitly passed configuration file.
 
 When `model` is set, that model is used for Codex execution. With `model: null`, Codex selects the model.
@@ -123,6 +127,7 @@ Because `--force` also replaces reviewed edits, use it only when regeneration is
 
 | Command | Purpose |
 | --- | --- |
+| `youtube-notes list` | List acquired transcripts and their source and summary notes as JSON |
 | `youtube-notes acquire <video-url>` | Retrieve metadata and captions only |
 | `youtube-notes import-raw --metadata <file> --captions <file>` | Import metadata and captions acquired elsewhere |
 | `youtube-notes build-source <manifest>` | Create a transcript Markdown note from captured captions |
@@ -131,6 +136,8 @@ Because `--force` also replaces reviewed edits, use it only when regeneration is
 | `youtube-notes config show` | Show effective settings and the summary profile |
 
 Run `youtube-notes <command> --help` to see the options for a command.
+
+`youtube-notes list` returns one item per video, ordered by the most recent successful capture. Each item includes the latest manifest and captions paths, the number of successful captures, and every source or summary note with the same canonical video URL. Captures that do not yet have derived notes are included with empty note lists. Unreadable manifests or notes are reported in the top-level `warnings` array without hiding valid items.
 
 ### Progress logs
 
@@ -173,7 +180,7 @@ Source notes use Frontmatter `schemaVersion: "1.0"`. New summary notes use `type
 
 Summary run reports record the selected profile name and SHA-256, prompt ID, document version, application envelope version, prompt source, and prompt SHA-256. Failed provider runs store complete subprocess diagnostics in a separate file referenced by `diagnostic_log`; the report's `error` field remains concise. Provider-only temporary files use the platform temporary directory, and artifacts are staged next to their destinations for atomic replacement.
 
-`ingest` and `build-summary` use generative AI. `acquire`, `import-raw`, `build-source`, `validate`, and `config show` are deterministic. Progress uses Python's standard `logging`; interactive output is colored by level and redirected or piped output remains uncolored.
+`ingest` and `build-summary` use generative AI. `list`, `acquire`, `import-raw`, `build-source`, `validate`, and `config show` are deterministic. Progress uses Python's standard `logging`; interactive output is colored by level and redirected or piped output remains uncolored.
 
 ### Application-owned summary profiles
 

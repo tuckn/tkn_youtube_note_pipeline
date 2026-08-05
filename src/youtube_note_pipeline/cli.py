@@ -16,6 +16,7 @@ from youtube_note_pipeline.config import (
     resolve_config,
 )
 from youtube_note_pipeline.console_logging import ColorFormatter, log_success, supports_color
+from youtube_note_pipeline.inventory import build_inventory
 from youtube_note_pipeline.pipeline import (
     build_source,
     build_summary,
@@ -67,6 +68,14 @@ def _verbosity(parser: argparse.ArgumentParser) -> None:
         action="store_true",
         help="show detailed diagnostic logs",
     )
+
+
+def _inventory_options(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--config", type=Path)
+    parser.add_argument("--raw-root", type=Path)
+    parser.add_argument("--source-root", type=Path)
+    parser.add_argument("--summary-root", type=Path)
+    _verbosity(parser)
 
 
 def _configure_logging(args: argparse.Namespace) -> None:
@@ -121,6 +130,12 @@ def build_parser() -> argparse.ArgumentParser:
     summary_parser.add_argument("source_note", type=Path)
     summary_parser.add_argument("--overwrite", action="store_true")
     _common(summary_parser)
+
+    list_parser = subparsers.add_parser(
+        "list",
+        help="list acquired transcripts and corresponding notes",
+    )
+    _inventory_options(list_parser)
 
     validate_parser = subparsers.add_parser("validate", help="validate an artifact")
     validate_parser.add_argument("path", type=Path)
@@ -248,6 +263,20 @@ def main(argv: list[str] | None = None) -> int:
             )
             report = write_report(config, "build-summary", [stage])
             _print_result(stage.path, stage.status, report)
+            return 0
+        if args.command == "list":
+            logger.info("Listing acquired transcripts and corresponding notes")
+            print(
+                json.dumps(
+                    build_inventory(
+                        config.raw_root,
+                        config.source_root,
+                        config.summary_root,
+                    ),
+                    ensure_ascii=False,
+                    indent=2,
+                )
+            )
             return 0
         if args.command == "validate":
             logger.info("Validating artifact: %s", args.path)
