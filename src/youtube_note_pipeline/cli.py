@@ -9,7 +9,12 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from youtube_note_pipeline.config import initialize_user_config, public_config, resolve_config
+from youtube_note_pipeline.config import (
+    PipelineConfig,
+    initialize_user_config,
+    public_config,
+    resolve_config,
+)
 from youtube_note_pipeline.console_logging import ColorFormatter, log_success, supports_color
 from youtube_note_pipeline.pipeline import (
     build_source,
@@ -20,6 +25,7 @@ from youtube_note_pipeline.pipeline import (
     run_import,
     write_report,
 )
+from youtube_note_pipeline.providers import ProviderExecutionError
 from youtube_note_pipeline.summary_resources import (
     BUILT_IN_SUMMARY_PROFILES,
     load_summary_profile,
@@ -160,6 +166,7 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     _configure_logging(args)
     logger.debug("Parsed command: %s", args.command)
+    config: PipelineConfig | None = None
     try:
         if args.command == "config" and args.config_command == "init":
             logger.info("Initializing user-global configuration")
@@ -258,7 +265,17 @@ def main(argv: list[str] | None = None) -> int:
                 log_success(logger, "Validation succeeded for %s (%s)", args.path, kind)
             return 1 if errors else 0
     except (OSError, ValueError, RuntimeError) as exc:
-        logger.error("%s", exc)
+        if isinstance(exc, ProviderExecutionError) and config is not None:
+            report = write_report(
+                config,
+                args.command,
+                [],
+                str(exc),
+                diagnostic_output=exc.diagnostic_output,
+            )
+            logger.error("%s; report=%s", exc, report)
+        else:
+            logger.error("%s", exc)
         return 1
     return 2
 

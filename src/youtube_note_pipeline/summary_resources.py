@@ -109,7 +109,9 @@ def _version(value: object, field: str, source: str) -> str:
 
 def _validate_strict_objects(node: object, location: str = "schema") -> None:
     if isinstance(node, dict):
-        if node.get("type") == "object":
+        if node.get("type") == "object" or "properties" in node:
+            if node.get("type") != "object":
+                raise ValueError(f"{location} object must set type to object")
             properties = node.get("properties")
             required = node.get("required")
             if not isinstance(properties, dict):
@@ -290,6 +292,21 @@ def validate_summary_document(
         raise ValueError(f"structured summary does not match output schema: {details}")
     if not isinstance(document, dict):
         raise ValueError("structured summary must be an object")
+    structuring = document.get("structuring")
+    if isinstance(structuring, list):
+        empty_sections = [
+            index
+            for index, section in enumerate(structuring)
+            if isinstance(section, dict)
+            and not section.get("details")
+            and not section.get("subsections")
+        ]
+        if empty_sections:
+            indexes = ", ".join(str(index) for index in empty_sections)
+            raise ValueError(
+                "structured summary does not match semantic contract: "
+                f"structuring sections at indexes {indexes} must contain details or subsections"
+            )
     return dict(document)
 
 

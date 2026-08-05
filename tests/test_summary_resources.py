@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 
 from youtube_note_pipeline.summary_resources import (
+    _validate_strict_objects,
     load_summary_profile,
     validate_summary_document,
 )
@@ -19,7 +20,7 @@ def test_packaged_default_summary_profile_is_versioned_and_bundled() -> None:
     assert len(profile.sha256) == 64
     assert profile.prompt.source.endswith("summary_profiles/default-ja/prompt.md")
     assert profile.output_schema.resource_id == "8135b54f-cc2e-484d-8616-f07e1ee376da"
-    assert profile.output_schema.version == "1.0"
+    assert profile.output_schema.version == "1.1"
     assert profile.output_schema.source.endswith("summary_profiles/default-ja/output.schema.json")
     assert set(profile.output_schema.schema["required"]) == set(
         profile.output_schema.schema["properties"]
@@ -50,6 +51,21 @@ def test_provider_golden_document_matches_built_in_output_contracts() -> None:
     for profile_name in ("default-ja", "default-en"):
         profile = load_summary_profile(profile_name)
         assert validate_summary_document(document, profile.output_schema) == document
+
+
+def test_output_schema_rejects_implicit_objects_in_nested_compositions() -> None:
+    with pytest.raises(ValueError, match=r"schema.anyOf\[0\] object must set type to object"):
+        _validate_strict_objects(
+            {"anyOf": [{"properties": {"value": {"type": "string"}}}]}
+        )
+
+
+def test_structuring_section_requires_details_or_subsections() -> None:
+    document = json.loads((FIXTURES / "summary_document.golden.json").read_text(encoding="utf-8"))
+    document["structuring"] = [{"heading": "空の節", "details": [], "subsections": []}]
+
+    with pytest.raises(ValueError, match="must contain details or subsections"):
+        validate_summary_document(document, load_summary_profile().output_schema)
 
 
 @pytest.mark.parametrize("name", ["Default", "../default", "default/profile", ""])

@@ -8,10 +8,11 @@ import re
 import subprocess
 import tempfile
 from pathlib import Path
+from typing import Any
 
 from youtube_note_pipeline.models import SummaryRequest
 from youtube_note_pipeline.prompting import render_summary_prompt
-from youtube_note_pipeline.providers.base import ProviderResult
+from youtube_note_pipeline.providers.base import ProviderExecutionError, ProviderResult
 from youtube_note_pipeline.summary_resources import (
     DEFAULT_SUMMARY_PROFILE,
     load_summary_profile,
@@ -20,11 +21,58 @@ from youtube_note_pipeline.summary_resources import (
 
 logger = logging.getLogger(__name__)
 MODEL_LINE = re.compile(r"(?m)^\s*model:\s*(\S+)\s*$")
+ERROR_PREFIX = re.compile(r"(?m)^ERROR:\s*")
+MAX_FALLBACK_ERROR_LENGTH = 500
 
 
 def _model_from_execution_log(stderr: str) -> str | None:
     match = MODEL_LINE.search(stderr)
     return match.group(1) if match else None
+
+
+def _codex_error_objects(output: str) -> list[dict[str, Any]]:
+    decoder = json.JSONDecoder()
+    errors: list[dict[str, Any]] = []
+    for match in ERROR_PREFIX.finditer(output):
+        candidate = output[match.end() :].lstrip()
+        try:
+            value, _ = decoder.raw_decode(candidate)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(value, dict):
+            errors.append(value)
+    return errors
+
+
+def _concise_failure_detail(stderr: str, stdout: str) -> str:
+    for value in reversed(_codex_error_objects(stderr) + _codex_error_objects(stdout)):
+        error = value.get("error")
+        if not isinstance(error, dict):
+            continue
+        code = str(error.get("code") or error.get("type") or "codex_error")
+        message = str(error.get("message") or "Codex request failed").strip()
+        status = value.get("status")
+        status_suffix = f" (status {status})" if status is not None else ""
+        return f"{code}: {message}{status_suffix}"
+
+    output = stderr or stdout
+    error_markers = ("error", "failed", "denied", "timed out", "panic")
+    for line in reversed(output.splitlines()):
+        fallback = line.strip()
+        if fallback and any(marker in fallback.casefold() for marker in error_markers):
+            if len(fallback) > MAX_FALLBACK_ERROR_LENGTH:
+                fallback = fallback[: MAX_FALLBACK_ERROR_LENGTH - 1] + "…"
+            return fallback
+    return "Codex exited without a structured error; see the diagnostic log"
+
+
+def _diagnostic_output(stderr: str, stdout: str) -> str:
+    sections = []
+    if stderr:
+        sections.append(f"=== stderr ===\n{stderr.rstrip()}")
+    if stdout:
+        sections.append(f"=== stdout ===\n{stdout.rstrip()}")
+    return "\n\n".join(sections) + "\n"
 
 
 class CodexProvider:
@@ -94,11 +142,12 @@ class CodexProvider:
                     check=False,
                 )
             except (OSError, subprocess.SubprocessError) as exc:
-                raise RuntimeError(f"Codex summary generation failed: {exc}") from exc
+                raise ProviderExecutionError(f"Codex summary generation failed: {exc}") from exc
             if result.returncode != 0:
-                detail = (result.stderr or result.stdout).strip()
-                raise RuntimeError(
-                    f"Codex summary generation failed with exit {result.returncode}: {detail}"
+                detail = _concise_failure_detail(result.stderr, result.stdout)
+                raise ProviderExecutionError(
+                    f"Codex summary generation failed with exit {result.returncode}: {detail}",
+                    diagnostic_output=_diagnostic_output(result.stderr, result.stdout),
                 )
             try:
                 payload = json.loads(output_path.read_text(encoding="utf-8"))

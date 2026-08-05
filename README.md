@@ -140,6 +140,10 @@ Progress is written to standard error and the final JSON result is written to st
 - `-q` / `--quiet`: suppress progress and show errors only
 - `-v` / `--verbose`: include detailed diagnostics
 
+Provider failures are reduced to a concise error on standard error. The run report keeps that
+concise message and points to a separate `*.provider.log` file when the complete provider output
+is available, so prompts and transcripts do not flood the terminal.
+
 ## Development
 
 ```console
@@ -167,7 +171,7 @@ Each raw capture is stored below `<raw-root>/<video-id>/<captured-at>/` as `meta
 
 Source notes use Frontmatter `schemaVersion: "1.0"`. New summary notes use `type: summary` and `schemaVersion: "5.0"` and record the IDs, versions, and SHA-256 hashes of the prompt, output schema, and template. Existing summary schemas 1.0, 2.0, 3.0, and 4.0 remain valid. Generation omits `nouns`, while validation permits a separate CLI to add it later.
 
-Summary run reports record the selected profile name and SHA-256, prompt ID, document version, application envelope version, prompt source, and prompt SHA-256. Provider-only files use the platform temporary directory, and artifacts are staged next to their destinations for atomic replacement.
+Summary run reports record the selected profile name and SHA-256, prompt ID, document version, application envelope version, prompt source, and prompt SHA-256. Failed provider runs store complete subprocess diagnostics in a separate file referenced by `diagnostic_log`; the report's `error` field remains concise. Provider-only temporary files use the platform temporary directory, and artifacts are staged next to their destinations for atomic replacement.
 
 `ingest` and `build-summary` use generative AI. `acquire`, `import-raw`, `build-source`, `validate`, and `config show` are deterministic. Progress uses Python's standard `logging`; interactive output is colored by level and redirected or piped output remains uncolored.
 

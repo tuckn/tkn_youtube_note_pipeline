@@ -5,6 +5,7 @@ from unittest.mock import Mock, patch
 import pytest
 
 from youtube_note_pipeline.models import SummaryRequest, VideoSource
+from youtube_note_pipeline.providers.base import ProviderExecutionError
 from youtube_note_pipeline.providers.codex import CodexProvider
 
 
@@ -82,6 +83,7 @@ def test_codex_schema_requires_nullable_and_empty_list_fields(monkeypatch) -> No
         assert set(key_point["required"]) == set(key_point["properties"])
         summary_section = schema["$defs"]["SummarySection"]
         assert set(summary_section["required"]) == set(summary_section["properties"])
+        assert "anyOf" not in summary_section
         assert "SummarySubsection" in schema["$defs"]
         assert "description" not in schema["properties"]["technical_terms"]
         output = Path(command[command.index("--output-last-message") + 1])
@@ -108,6 +110,58 @@ def test_codex_detects_effective_model_from_execution_log(monkeypatch) -> None:
     result = CodexProvider().generate(request())
     assert result.model == "gpt-5.6-sol"
     assert result.generator == "Codex (gpt-5.6-sol)"
+
+
+def test_codex_failure_is_concise_and_retains_full_diagnostics(monkeypatch) -> None:
+    api_error = {
+        "type": "error",
+        "error": {
+            "type": "invalid_request_error",
+            "code": "invalid_json_schema",
+            "message": "additionalProperties must be false",
+        },
+        "status": 400,
+    }
+    stderr = (
+        "OpenAI Codex\n--------\nuser\nTRANSCRIPT CONTENT\n"
+        f"ERROR: {json.dumps(api_error)}\nERROR: {json.dumps(api_error)}\n"
+    )
+
+    def fake_run(command, **kwargs):
+        if command[-1] == "--version":
+            return Mock(returncode=0, stdout="codex-cli 1.0", stderr="")
+        return Mock(returncode=1, stdout="", stderr=stderr)
+
+    monkeypatch.setattr("subprocess.run", fake_run)
+
+    with pytest.raises(ProviderExecutionError) as captured:
+        CodexProvider().generate(request())
+
+    assert str(captured.value) == (
+        "Codex summary generation failed with exit 1: "
+        "invalid_json_schema: additionalProperties must be false (status 400)"
+    )
+    assert "TRANSCRIPT CONTENT" not in str(captured.value)
+    assert captured.value.diagnostic_output is not None
+    assert "TRANSCRIPT CONTENT" in captured.value.diagnostic_output
+    assert captured.value.diagnostic_output.count("invalid_json_schema") == 2
+
+
+def test_codex_failure_fallback_does_not_echo_prompt_content(monkeypatch) -> None:
+    def fake_run(command, **kwargs):
+        if command[-1] == "--version":
+            return Mock(returncode=0, stdout="codex-cli 1.0", stderr="")
+        return Mock(returncode=1, stdout="", stderr="user\nPRIVATE TRANSCRIPT CONTENT\n")
+
+    monkeypatch.setattr("subprocess.run", fake_run)
+
+    with pytest.raises(ProviderExecutionError) as captured:
+        CodexProvider().generate(request())
+
+    assert "PRIVATE TRANSCRIPT CONTENT" not in str(captured.value)
+    assert str(captured.value).endswith(
+        "Codex exited without a structured error; see the diagnostic log"
+    )
 
 
 def test_codex_preflight_failure() -> None:

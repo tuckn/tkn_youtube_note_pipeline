@@ -1,11 +1,14 @@
 import json
 import logging
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 from youtube_note_pipeline.cli import _configure_logging, build_parser, main
+from youtube_note_pipeline.config import PipelineConfig
 from youtube_note_pipeline.console_logging import SUCCESS, ColorFormatter
+from youtube_note_pipeline.providers import ProviderExecutionError
 
 
 def test_logging_defaults_to_info() -> None:
@@ -130,3 +133,39 @@ def test_config_init_is_idempotent_and_refuses_edited_file(
     target.write_text("provider: edited\n", encoding="utf-8")
     assert main(["config", "init", "--quiet"]) == 1
     assert "refusing to overwrite existing configuration" in capsys.readouterr().err
+
+
+def test_build_summary_failure_reports_concise_error_and_diagnostic_path(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    config = PipelineConfig(
+        raw_root=tmp_path / "raw",
+        source_root=tmp_path / "source",
+        summary_root=tmp_path / "summary",
+        reports_root=tmp_path / "reports",
+    )
+    monkeypatch.setattr(
+        "youtube_note_pipeline.cli._resolved",
+        lambda args: SimpleNamespace(config=config, sources=[]),
+    )
+    monkeypatch.setattr("youtube_note_pipeline.cli.provider_for_config", lambda config: object())
+
+    def fail_summary(*args, **kwargs):
+        raise ProviderExecutionError(
+            "Codex summary generation failed: invalid_json_schema",
+            diagnostic_output="PRIVATE TRANSCRIPT CONTENT\nfull error\n",
+        )
+
+    monkeypatch.setattr("youtube_note_pipeline.cli.build_summary", fail_summary)
+
+    assert main(["build-summary", str(tmp_path / "source.md")]) == 1
+    error_output = capsys.readouterr().err
+    assert "invalid_json_schema" in error_output
+    assert "PRIVATE TRANSCRIPT CONTENT" not in error_output
+    reports = list(config.reports_root.glob("*.json"))
+    assert len(reports) == 1
+    payload = json.loads(reports[0].read_text(encoding="utf-8"))
+    assert payload["diagnostic_log"] is not None
+    assert Path(payload["diagnostic_log"]).read_text(encoding="utf-8").startswith(
+        "PRIVATE TRANSCRIPT CONTENT"
+    )

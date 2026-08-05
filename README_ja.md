@@ -140,6 +140,10 @@ youtube-notes ingest "https://www.youtube.com/watch?v=VIDEO_ID" --force
 - `-q` / `--quiet`: 進捗を省略し、errorだけを表示
 - `-v` / `--verbose`: 詳細な診断情報も表示
 
+providerの失敗はstandard errorへ短い要点だけを表示します。完全なprovider出力がある場合は
+別の`*.provider.log`へ保存し、run reportの`diagnostic_log`から参照できるため、promptや
+Transcript全文がterminalへ流れません。
+
 ## 開発
 
 ```console
@@ -167,7 +171,7 @@ YouTube URL
 
 sourceノートはFrontmatter `schemaVersion: "1.0"`を使用します。新しいsummaryノートは`type: summary`と`schemaVersion: "5.0"`を使用し、prompt・output schema・templateのID、version、SHA-256を記録します。既存summaryのschema 1.0、2.0、3.0、4.0も引き続き検証できます。`nouns`は生成時に登録せず、別のCLIによる付与を許可します。
 
-summary生成stageのrun reportには、選択したprofile名とSHA-256、prompt ID、document version、application envelope version、prompt source、prompt SHA-256を記録します。provider用の一時ファイルにはplatformのtemp directoryを使用し、artifactは保存先の隣でstagingしてatomicに置き換えます。
+summary生成stageのrun reportには、選択したprofile名とSHA-256、prompt ID、document version、application envelope version、prompt source、prompt SHA-256を記録します。providerが失敗した場合、reportの`error`は短い要点に限定し、完全なsubprocess診断は`diagnostic_log`が示す別ファイルへ保存します。provider用の一時ファイルにはplatformのtemp directoryを使用し、artifactは保存先の隣でstagingしてatomicに置き換えます。
 
 生成AIを使うコマンドは`ingest`と`build-summary`です。`acquire`、`import-raw`、`build-source`、`validate`、`config show`はdeterministicな処理です。進捗ログはPython標準の`logging`を使用し、interactive terminalではlevelに応じて色を付け、redirectまたはpipe時は無色にします。
 

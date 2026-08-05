@@ -28,7 +28,7 @@ from youtube_note_pipeline.notes import (
     transcript_from_source,
 )
 from youtube_note_pipeline.prompting import PROMPT_ENVELOPE_VERSION
-from youtube_note_pipeline.providers import CodexProvider, SummaryProvider
+from youtube_note_pipeline.providers import CodexProvider, ProviderExecutionError, SummaryProvider
 from youtube_note_pipeline.raw import acquire, import_raw
 from youtube_note_pipeline.validation import (
     validate_manifest,
@@ -344,18 +344,29 @@ def _provider(config: PipelineConfig) -> SummaryProvider:
 
 
 def write_report(
-    config: PipelineConfig, command: str, stages: list[StageResult], error: str | None = None
+    config: PipelineConfig,
+    command: str,
+    stages: list[StageResult],
+    error: str | None = None,
+    *,
+    diagnostic_output: str | None = None,
 ) -> Path:
     now = datetime.now().astimezone()
     run_id = f"{now.strftime('%Y%m%dT%H%M%S%z')}_{uuid.uuid4().hex[:8]}"
     path = config.reports_root / f"{run_id}.json"
+    diagnostic_path = None
+    if diagnostic_output:
+        diagnostic_path = config.reports_root / f"{run_id}.provider.log"
+        atomic_write(diagnostic_path, diagnostic_output)
+        logger.debug("Provider diagnostic log written: %s", diagnostic_path)
     payload = {
-        "schema_version": "1.0",
+        "schema_version": "1.1",
         "run_id": run_id,
         "command": command,
         "started_at": now.isoformat(timespec="seconds"),
         "status": "failure" if error else "success",
         "error": error,
+        "diagnostic_log": str(diagnostic_path) if diagnostic_path else None,
         "stages": [
             {"path": str(stage.path), "status": stage.status, "details": stage.details}
             for stage in stages
@@ -418,7 +429,16 @@ def ingest(
         )
         stages.append(summary_stage)
     except Exception as exc:
-        report = write_report(config, "ingest", stages, str(exc))
+        diagnostic_output = (
+            exc.diagnostic_output if isinstance(exc, ProviderExecutionError) else None
+        )
+        report = write_report(
+            config,
+            "ingest",
+            stages,
+            str(exc),
+            diagnostic_output=diagnostic_output,
+        )
         raise RuntimeError(f"{exc}; report={report}") from exc
     report = write_report(config, "ingest", stages)
     log_success(logger, "Ingest completed successfully")

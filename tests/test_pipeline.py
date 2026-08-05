@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from youtube_note_pipeline import pipeline
+from youtube_note_pipeline.config import PipelineConfig
 from youtube_note_pipeline.notes import (
     compact_description,
     split_note,
@@ -138,7 +139,6 @@ def test_full_synthetic_pipeline_and_idempotency(tmp_path: Path) -> None:
     assert summary.details["prompt_sha256"] == "1" * 64
     assert validate_summary(summary.path, tmp_path / "source") == []
     assert build_summary(source.path, tmp_path / "summary", FakeProvider()).status == "unchanged"
-
     source_text = source.path.read_text(encoding="utf-8")
     summary_text = summary.path.read_text(encoding="utf-8")
     source_metadata, _ = split_note(source_text)
@@ -184,6 +184,33 @@ def test_full_synthetic_pipeline_and_idempotency(tmp_path: Path) -> None:
     assert summary_text.index("updated:") < summary_text.index("noteId:")
 
 
+def test_failure_report_keeps_console_error_concise_and_writes_diagnostic_log(
+    tmp_path: Path,
+) -> None:
+    config = PipelineConfig(
+        raw_root=tmp_path / "raw",
+        source_root=tmp_path / "source",
+        summary_root=tmp_path / "summary",
+        reports_root=tmp_path / "reports",
+    )
+
+    report = pipeline.write_report(
+        config,
+        "build-summary",
+        [],
+        "invalid_json_schema: additionalProperties must be false",
+        diagnostic_output="prompt and transcript\nfull provider failure\n",
+    )
+
+    payload = json.loads(report.read_text(encoding="utf-8"))
+    assert payload["schema_version"] == "1.1"
+    assert payload["error"] == "invalid_json_schema: additionalProperties must be false"
+    diagnostic_log = Path(payload["diagnostic_log"])
+    assert diagnostic_log.read_text(encoding="utf-8") == (
+        "prompt and transcript\nfull provider failure\n"
+    )
+
+
 def test_compact_description_uses_a_sentence_boundary_or_ellipsis() -> None:
     sentence = "短い文です。" * 30
     compacted = compact_description(sentence, max_chars=40)
@@ -194,12 +221,12 @@ def test_compact_description_uses_a_sentence_boundary_or_ellipsis() -> None:
     assert compacted_without_boundary == "a" * 19 + "…"
 
 
-def test_summary_schema_requires_direct_details_or_subsections() -> None:
+def test_summary_contract_requires_direct_details_or_subsections() -> None:
     profile = load_summary_profile()
     invalid = _summary_document("要約")
     invalid["structuring"] = [{"heading": "空の分類", "details": [], "subsections": []}]
 
-    with pytest.raises(ValueError, match="structured summary does not match output schema"):
+    with pytest.raises(ValueError, match="must contain details or subsections"):
         validate_summary_document(invalid, profile.output_schema)
 
 
