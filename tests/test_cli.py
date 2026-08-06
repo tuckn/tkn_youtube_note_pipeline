@@ -5,7 +5,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from youtube_note_pipeline.cli import _configure_logging, build_parser, main
+from youtube_note_pipeline.cli import _configure_logging, _print_result, build_parser, main
 from youtube_note_pipeline.config import PipelineConfig
 from youtube_note_pipeline.console_logging import SUCCESS, ColorFormatter
 from youtube_note_pipeline.providers import ProviderExecutionError
@@ -53,6 +53,24 @@ def test_console_formatter_keeps_redirected_output_plain() -> None:
     record = logging.LogRecord("test", SUCCESS, __file__, 1, "message", (), None)
 
     assert formatter.format(record) == "[SUCCESS] message"
+
+
+def test_final_result_json_is_pretty_printed(capsys) -> None:
+    _print_result(Path("summary.md"), "created", Path("report.json"))
+
+    output = capsys.readouterr().out
+    assert output == (
+        "{\n"
+        '  "status": "created",\n'
+        '  "path": "summary.md",\n'
+        '  "report": "report.json"\n'
+        "}\n"
+    )
+    assert json.loads(output) == {
+        "status": "created",
+        "path": "summary.md",
+        "report": "report.json",
+    }
 
 
 @pytest.mark.parametrize("option", ["--force", "--overwrite"])

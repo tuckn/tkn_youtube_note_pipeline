@@ -73,7 +73,7 @@ def build_source(
         ) == manifest.video.canonical_url and not validate_source_against_manifest(
             target, manifest_path
         ):
-            logger.info("Source note is already current: %s", target)
+            log_success(logger, "Source note is already current: %s", target)
             return StageResult(target, "unchanged", {"validated": True})
         raise FileExistsError(f"source collision: {target}")
     caption = manifest.artifacts["captions"]
@@ -90,7 +90,7 @@ def build_source(
     errors = validate_source_against_manifest(target, manifest_path)
     if errors:
         raise ValueError("source validation failed: " + "; ".join(errors))
-    logger.info("Source note %s: %s", status, target)
+    log_success(logger, "Source note %s: %s", status, target)
     return StageResult(target, status, {"segments": len(segments), "validated": True})
 
 
@@ -223,7 +223,7 @@ def build_summary(
                         f"and replace {target}"
                     )
                 if not validate_summary(target):
-                    logger.info("Summary note is already current: %s", target)
+                    log_success(logger, "Summary note is already current: %s", target)
                     return StageResult(
                         target,
                         "unchanged",
@@ -308,7 +308,7 @@ def build_summary(
     errors = validate_summary(target)
     if errors:
         raise ValueError("summary validation failed: " + "; ".join(errors))
-    logger.info("Summary note %s: %s", status, target)
+    log_success(logger, "Summary note %s: %s", status, target)
     return StageResult(
         target,
         status,
@@ -385,7 +385,7 @@ def run_acquire(url: str, config: PipelineConfig, refresh: bool = False) -> Stag
     if status == "failure":
         logger.error("Raw capture failed: %s", parsed.error)
     else:
-        logger.info("Raw capture ready: %s", manifest)
+        log_success(logger, "Raw capture ready: %s", manifest)
     return StageResult(manifest, status, {"capture_status": parsed.status, "error": parsed.error})
 
 
@@ -398,7 +398,7 @@ def run_import(
 ) -> StageResult:
     logger.info("Importing external metadata and captions")
     manifest = import_raw(metadata, captions, config.raw_root, language, refresh)
-    logger.info("Raw import ready: %s", manifest)
+    log_success(logger, "Raw import ready: %s", manifest)
     return StageResult(manifest, "created", {"capture_status": "success"})
 
 

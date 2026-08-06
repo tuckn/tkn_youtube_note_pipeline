@@ -1,4 +1,5 @@
 import json
+import logging
 from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
@@ -7,6 +8,7 @@ import pytest
 
 from youtube_note_pipeline import pipeline
 from youtube_note_pipeline.config import PipelineConfig
+from youtube_note_pipeline.console_logging import SUCCESS
 from youtube_note_pipeline.notes import (
     compact_description,
     split_note,
@@ -113,7 +115,10 @@ class FakeProvider:
         )
 
 
-def test_full_synthetic_pipeline_and_idempotency(tmp_path: Path) -> None:
+def test_full_synthetic_pipeline_and_idempotency(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    caplog.set_level(logging.INFO)
     manifest = import_raw(
         FIXTURES / "metadata.info.json",
         FIXTURES / "captions.ja.json3",
@@ -182,6 +187,17 @@ def test_full_synthetic_pipeline_and_idempotency(tmp_path: Path) -> None:
     assert summary_text.index("reviewStatus:") < summary_text.index("date:")
     assert summary_text.index("date:") < summary_text.index("updated:")
     assert summary_text.index("updated:") < summary_text.index("noteId:")
+    success_messages = [
+        record.getMessage() for record in caplog.records if record.levelno == SUCCESS
+    ]
+    assert any(message.startswith("Source note created:") for message in success_messages)
+    assert any(
+        message.startswith("Source note is already current:") for message in success_messages
+    )
+    assert any(message.startswith("Summary note created:") for message in success_messages)
+    assert any(
+        message.startswith("Summary note is already current:") for message in success_messages
+    )
 
 
 def test_failure_report_keeps_console_error_concise_and_writes_diagnostic_log(

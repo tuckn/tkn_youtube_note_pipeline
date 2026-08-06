@@ -32,17 +32,26 @@ The second command displays the active configuration and confirms that `youtube-
 Reinstall after every repository update, such as after `git pull`, to make the updated code and dependencies available to the installed command:
 
 ```console
-uv tool install "C:\path\to\tkn_youtube_note_pipeline" --force
+uv tool install "C:\path\to\tkn_youtube_note_pipeline"
 youtube-notes config show
 ```
 
 For development, an editable installation can be used instead:
 
 ```console
-uv tool install -e "C:\path\to\tkn_youtube_note_pipeline" --force
+uv tool install -e "C:\path\to\tkn_youtube_note_pipeline"
 ```
 
-The `-e` (`--editable`) option makes the installed command reference the repository source code directly, so source-code edits take effect without reinstallation. If an update adds or changes dependency modules in `pyproject.toml` or `uv.lock`, reinstall with the same editable command and `--force` so that the tool environment is updated too.
+The `-e` (`--editable`) option makes the installed command reference the repository source code directly, so source-code edits take effect without reinstallation. If an update changes dependencies in `pyproject.toml`, package metadata, or entry points, run the same editable installation command again to update the tool environment.
+
+If a normal reinstall fails, the installed command still uses stale dependencies, or the tool environment or entry point is damaged, recreate the tool environment with `--force`:
+
+```console
+uv tool install "C:\path\to\tkn_youtube_note_pipeline" --force
+youtube-notes config show
+```
+
+To repair an editable installation while preserving editable mode, add `-e` to the forced installation command.
 
 ## Configuration
 
@@ -142,8 +151,11 @@ Run `youtube-notes <command> --help` to see the options for a command.
 ### Progress logs
 
 Progress is written to standard error and the final JSON result is written to standard output.
+The final JSON is indented across multiple lines for readability and remains directly parseable.
 
-- Default: show normal progress
+- `[INFO]`: show work starting or in progress
+- `[SUCCESS]`: show when a capture, source note, or summary note is saved and validated
+- `[ERROR]`: show when work cannot be completed
 - `-q` / `--quiet`: suppress progress and show errors only
 - `-v` / `--verbose`: include detailed diagnostics
 

@@ -32,17 +32,26 @@ youtube-notes config show
 `git pull`などでリポジトリを更新するたびに、更新後のコードと依存モジュールをインストール済みのコマンドへ反映するため、次のコマンドで再インストールしてください。
 
 ```console
-uv tool install "C:\path\to\tkn_youtube_note_pipeline" --force
+uv tool install "C:\path\to\tkn_youtube_note_pipeline"
 youtube-notes config show
 ```
 
 開発時には、代わりにeditable installationを使用できます。
 
 ```console
-uv tool install -e "C:\path\to\tkn_youtube_note_pipeline" --force
+uv tool install -e "C:\path\to\tkn_youtube_note_pipeline"
 ```
 
-`-e`（`--editable`）を指定すると、インストールされたコマンドはリポジトリ内のソースコードを直接参照するため、ソースコードの変更は再インストールせずに反映されます。ただし、更新によって`pyproject.toml`または`uv.lock`の依存モジュールが追加・変更された場合は、tool環境にも反映するため、同じeditable installationのコマンドを`--force`付きで再実行してください。
+`-e`（`--editable`）を指定すると、インストールされたコマンドはリポジトリ内のソースコードを直接参照するため、ソースコードの変更は再インストールせずに反映されます。ただし、更新によって`pyproject.toml`の依存関係、package metadata、entry pointが変更された場合は、tool環境にも反映するため、同じeditable installationのコマンドを再実行してください。
+
+通常の再インストールが失敗する、インストール済みコマンドが古い依存関係を使い続ける、またはtool環境やentry pointが壊れている場合は、`--force`を指定してtool環境を再作成してください。
+
+```console
+uv tool install "C:\path\to\tkn_youtube_note_pipeline" --force
+youtube-notes config show
+```
+
+editable installationをeditableのまま修復する場合は、`--force`付きのインストールコマンドに`-e`も指定してください。
 
 ## 設定
 
@@ -142,8 +151,12 @@ youtube-notes ingest "https://www.youtube.com/watch?v=VIDEO_ID" --force
 ### 進捗ログ
 
 進捗はstandard errorへ、最終的なJSON resultはstandard outputへ出力します。
+最終JSONは人が確認しやすい複数行のindent付き形式ですが、そのままJSON parserで
+読み取れます。
 
-- 既定: 通常の進捗を表示
+- `[INFO]`: 処理の開始・進行中の状態を表示
+- `[SUCCESS]`: 取得結果やsource・summaryノートが保存・検証済みになった時点で表示
+- `[ERROR]`: 処理を完了できなかった場合に表示
 - `-q` / `--quiet`: 進捗を省略し、errorだけを表示
 - `-v` / `--verbose`: 詳細な診断情報も表示
 

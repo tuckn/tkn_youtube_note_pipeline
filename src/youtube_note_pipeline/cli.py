@@ -173,7 +173,7 @@ def _print_result(path: Path, status: str, report: Path | None = None) -> None:
     payload = {"status": status, "path": str(path)}
     if report:
         payload["report"] = str(report)
-    print(json.dumps(payload, ensure_ascii=False))
+    print(json.dumps(payload, ensure_ascii=False, indent=2))
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -186,7 +186,13 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "config" and args.config_command == "init":
             logger.info("Initializing user-global configuration")
             path, status = initialize_user_config()
-            print(json.dumps({"status": status, "path": str(path)}, ensure_ascii=False))
+            print(
+                json.dumps(
+                    {"status": status, "path": str(path)},
+                    ensure_ascii=False,
+                    indent=2,
+                )
+            )
             return 0
         resolved = _resolved(args)
         config = resolved.config
