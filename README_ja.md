@@ -36,14 +36,6 @@ uv tool install "C:\path\to\tkn_youtube_note_pipeline" --reinstall
 youtube-notes config show
 ```
 
-開発時には、代わりにeditable installationを使用できます。
-
-```console
-uv tool install -e "C:\path\to\tkn_youtube_note_pipeline" --reinstall
-```
-
-`-e`（`--editable`）を指定すると、インストールされたコマンドはリポジトリ内のソースコードを直接参照するため、ソースコードの変更は再インストールせずに反映されます。ただし、更新によって`pyproject.toml`の依存関係、package metadata、entry pointが変更された場合や、リポジトリのフォルダを移動または名前変更した場合は、tool環境とリポジトリへの参照を更新するため、同じeditable installationのコマンドを再実行してください。
-
 `--force`は、実行ファイルの競合やtool環境の破損によって通常の`--reinstall`が成功せず、uvにtool installationの強制作成や既存entry pointの置き換えをさせる必要がある場合に限って使用します。通常のリポジトリ更新には、`--force`ではなく`--reinstall`を使用してください。
 
 ```console
@@ -51,7 +43,21 @@ uv tool install "C:\path\to\tkn_youtube_note_pipeline" --force
 youtube-notes config show
 ```
 
-editable installationをeditableのまま修復する場合は、`--force`付きのインストールコマンドに`-e`も指定してください。
+### 開発用のeditable installation
+
+開発時にソースコードの変更をすぐCLIへ反映したい場合は、editable installationを使用します。
+
+```console
+uv tool install -e "C:\path\to\tkn_youtube_note_pipeline" --reinstall
+```
+
+`-e`（`--editable`）を指定すると、インストールされたコマンドはリポジトリ内のソースコードを直接参照するため、ソースコードの変更は再インストールせずに反映されます。ただし、更新によって`pyproject.toml`の依存関係、package metadata、entry pointが変更された場合や、リポジトリのフォルダを移動または名前変更した場合は、tool環境とリポジトリへの参照を更新するため、同じeditable installationのコマンドを再実行してください。
+
+editable installationをeditableのまま修復する場合は、次のコマンドを使用します。
+
+```console
+uv tool install -e "C:\path\to\tkn_youtube_note_pipeline" --force
+```
 
 ## 設定
 
