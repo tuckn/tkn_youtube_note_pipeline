@@ -32,19 +32,19 @@ The second command displays the active configuration and confirms that `youtube-
 Reinstall after every repository update, such as after `git pull`, to make the updated code and dependencies available to the installed command:
 
 ```console
-uv tool install "C:\path\to\tkn_youtube_note_pipeline"
+uv tool install "C:\path\to\tkn_youtube_note_pipeline" --reinstall
 youtube-notes config show
 ```
 
 For development, an editable installation can be used instead:
 
 ```console
-uv tool install -e "C:\path\to\tkn_youtube_note_pipeline"
+uv tool install -e "C:\path\to\tkn_youtube_note_pipeline" --reinstall
 ```
 
-The `-e` (`--editable`) option makes the installed command reference the repository source code directly, so source-code edits take effect without reinstallation. If an update changes dependencies in `pyproject.toml`, package metadata, or entry points, run the same editable installation command again to update the tool environment.
+The `-e` (`--editable`) option makes the installed command reference the repository source code directly, so source-code edits take effect without reinstallation. If an update changes dependencies in `pyproject.toml`, package metadata, or entry points, or if the repository folder is moved or renamed, run the same editable installation command again to update the tool environment and repository reference.
 
-If a normal reinstall fails, the installed command still uses stale dependencies, or the tool environment or entry point is damaged, recreate the tool environment with `--force`:
+Use `--force` only when uv must forcibly recreate the tool installation or replace an existing entry point, such as when an executable conflict or a damaged tool environment prevents the normal `--reinstall` command from succeeding. Use `--reinstall`, not `--force`, for ordinary repository updates:
 
 ```console
 uv tool install "C:\path\to\tkn_youtube_note_pipeline" --force
