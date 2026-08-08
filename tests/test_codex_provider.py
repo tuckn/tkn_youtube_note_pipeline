@@ -59,7 +59,7 @@ def test_codex_structured_output(monkeypatch) -> None:
         "package:youtube_note_pipeline/summary_profiles/default-ja/prompt.md"
     )
     assert result.prompt_id == "70a1a332-fa68-4a6d-9499-d703a17ced3e"
-    assert result.prompt_version == "2.0"
+    assert result.prompt_version == "2.1"
     assert result.prompt_envelope_version == "test-v1"
     assert result.prompt_sha256 is not None
     assert result.output_schema_id == "8135b54f-cc2e-484d-8616-f07e1ee376da"

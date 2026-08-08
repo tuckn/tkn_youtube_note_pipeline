@@ -1,7 +1,7 @@
 ---
 type: prompt
 id: 70a1a332-fa68-4a6d-9499-d703a17ced3e
-version: "2.0"
+version: "2.1"
 ---
 
 # Default YouTube summary instructions
@@ -70,10 +70,15 @@ claims, reasoning, concrete examples, and conclusion without watching it.
   video's broader claims or conclusion into the definition. Mention the video's
   use only when it is nonstandard or essential to disambiguation. Do not
   substitute external dictionary knowledge.
-- `conclusion`: state the video's final conclusion or practical implication
-  concisely in one paragraph without adding advice that the speaker did not
-  provide. Do not merely repeat the full `summary`.
+- `conclusion`: normally write two or three short Japanese paragraphs totaling
+  roughly 300–500 characters. In the first paragraph, state the video's final
+  conclusion as a standalone takeaway that remains meaningful when compacted
+  into the note description. In the second paragraph, synthesize why that
+  conclusion follows from the video's central reasoning and what broader
+  meaning the speaker gives it. Add a third paragraph only when the source
+  explicitly provides a practical implication, recommendation, or important
+  final qualification. Do not merely repeat the full `summary`, list earlier
+  details again, or add advice that the speaker did not provide.
 
 Timestamps must refer only to timestamps present in the transcript. Never
 invent, interpolate, or assign a timestamp based only on topic order.
-
