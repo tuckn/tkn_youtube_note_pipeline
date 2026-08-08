@@ -11,6 +11,10 @@ from youtube_note_pipeline.console_logging import SUCCESS, ColorFormatter
 from youtube_note_pipeline.providers import ProviderExecutionError
 
 
+def test_cli_program_name() -> None:
+    assert build_parser().prog == "tkn-youtube-note"
+
+
 def test_logging_defaults_to_info() -> None:
     args = build_parser().parse_args(["config", "show"])
     _configure_logging(args)

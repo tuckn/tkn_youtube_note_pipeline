@@ -7,7 +7,7 @@
 通常は、動画URLを指定して次の1コマンドを実行します。
 
 ```console
-youtube-notes ingest "https://www.youtube.com/watch?v=VIDEO_ID"
+tkn-youtube-note ingest "https://www.youtube.com/watch?v=VIDEO_ID"
 ```
 
 ## 必要なもの
@@ -24,23 +24,23 @@ Python版`yt-dlp`はdependencyとして自動的にインストールされる�
 
 ```console
 uv tool install "C:\path\to\tkn_youtube_note_pipeline"
-youtube-notes config show
+tkn-youtube-note config show
 ```
 
-2つ目のコマンドは、インストール後に現在の設定を表示し、`youtube-notes`を実行できることを確認します。この方式では、インストール時点のコードが使用され、その後のリポジトリの変更は自動的に反映されません。
+2つ目のコマンドは、インストール後に現在の設定を表示し、`tkn-youtube-note`を実行できることを確認します。この方式では、インストール時点のコードが使用され、その後のリポジトリの変更は自動的に反映されません。
 
 `git pull`などでリポジトリを更新するたびに、更新後のコードと依存モジュールをインストール済みのコマンドへ反映するため、次のコマンドで再インストールしてください。
 
 ```console
 uv tool install "C:\path\to\tkn_youtube_note_pipeline" --reinstall
-youtube-notes config show
+tkn-youtube-note config show
 ```
 
 `--force`は、実行ファイルの競合やtool環境の破損によって通常の`--reinstall`が成功せず、uvにtool installationの強制作成や既存entry pointの置き換えをさせる必要がある場合に限って使用します。通常のリポジトリ更新には、`--force`ではなく`--reinstall`を使用してください。
 
 ```console
 uv tool install "C:\path\to\tkn_youtube_note_pipeline" --force
-youtube-notes config show
+tkn-youtube-note config show
 ```
 
 ### 開発用のeditable installation
@@ -64,8 +64,8 @@ uv tool install -e "C:\path\to\tkn_youtube_note_pipeline" --force
 user-global configを初期化し、有効な設定を確認します。
 
 ```console
-youtube-notes config init
-youtube-notes config show
+tkn-youtube-note config init
+tkn-youtube-note config show
 ```
 
 `config init`はpackageに含まれるexampleを`~/.tkn/youtube_note_pipeline/config.yaml`へ作成し、statusとpathをJSONで表示します。同じ内容のファイルがすでにある場合は`unchanged`とし、編集済みの既存設定は上書きしません。repository-localなoverrideには`./.tkn/config.yaml`を使用し、任意の設定ファイルは`--config`で指定できます。
@@ -119,7 +119,7 @@ Windowsで自動処理とinteractive PowerShellが異なる`codex`を解決す�
 ### 動画を要約する
 
 ```console
-youtube-notes ingest "https://www.youtube.com/watch?v=VIDEO_ID"
+tkn-youtube-note ingest "https://www.youtube.com/watch?v=VIDEO_ID"
 ```
 
 字幕を取得し、字幕全文のMarkdownノートと、選択したprofileの言語による要約Markdownノートを作成します。1回の実行で指定できるのは1本の動画です。playlist URLとchannel URLには対応していません。
@@ -127,13 +127,13 @@ youtube-notes ingest "https://www.youtube.com/watch?v=VIDEO_ID"
 英語で要約する場合は、configの`summary_profile`を変更するか、次のように指定します。
 
 ```console
-youtube-notes ingest "https://www.youtube.com/watch?v=VIDEO_ID" --summary-profile default-en
+tkn-youtube-note ingest "https://www.youtube.com/watch?v=VIDEO_ID" --summary-profile default-en
 ```
 
 同じ保存先のsourceノートとsummaryノートを意図的に再生成して置き換える場合は、`--force`を指定します。`--overwrite`も同じ意味です。
 
 ```console
-youtube-notes ingest "https://www.youtube.com/watch?v=VIDEO_ID" --force
+tkn-youtube-note ingest "https://www.youtube.com/watch?v=VIDEO_ID" --force
 ```
 
 `--force`はreview済みの編集も置き換えるため、再生成してよい場合だけ使用してください。metadataと字幕も新しく取得する場合は`--refresh --force`を指定します。
@@ -142,17 +142,17 @@ youtube-notes ingest "https://www.youtube.com/watch?v=VIDEO_ID" --force
 
 | コマンド | 用途 |
 | --- | --- |
-| `youtube-notes list` | 取得済み文字起こしと対応するsource・summaryノートをJSONで一覧表示 |
-| `youtube-notes acquire <video-url>` | metadataと字幕だけを取得 |
-| `youtube-notes import-raw --metadata <file> --captions <file>` | 別の方法で取得したmetadataと字幕を取り込み |
-| `youtube-notes build-source <manifest>` | 取得済み字幕から字幕全文のMarkdownノートを作成 |
-| `youtube-notes build-summary <source-note>` | 既存のsourceノートから要約Markdownノートを作成 |
-| `youtube-notes validate <artifact>` | 生成物を検証 |
-| `youtube-notes config show` | 有効な設定とsummary profileを表示 |
+| `tkn-youtube-note list` | 取得済み文字起こしと対応するsource・summaryノートをJSONで一覧表示 |
+| `tkn-youtube-note acquire <video-url>` | metadataと字幕だけを取得 |
+| `tkn-youtube-note import-raw --metadata <file> --captions <file>` | 別の方法で取得したmetadataと字幕を取り込み |
+| `tkn-youtube-note build-source <manifest>` | 取得済み字幕から字幕全文のMarkdownノートを作成 |
+| `tkn-youtube-note build-summary <source-note>` | 既存のsourceノートから要約Markdownノートを作成 |
+| `tkn-youtube-note validate <artifact>` | 生成物を検証 |
+| `tkn-youtube-note config show` | 有効な設定とsummary profileを表示 |
 
-各コマンドのoptionは`youtube-notes <command> --help`で確認できます。
+各コマンドのoptionは`tkn-youtube-note <command> --help`で確認できます。
 
-`youtube-notes list`は動画ごとに1件を、最新の取得日時から順に返します。各itemには、最新のmanifest・字幕path、成功した取得回数、同じcanonical video URLを持つすべてのsource・summaryノートが含まれます。まだ後続ノートを作成していない取得結果も、空のノート一覧として表示します。読み取れないmanifestやノートは、有効なitemを隠さずtop-levelの`warnings`配列で報告します。
+`tkn-youtube-note list`は動画ごとに1件を、最新の取得日時から順に返します。各itemには、最新のmanifest・字幕path、成功した取得回数、同じcanonical video URLを持つすべてのsource・summaryノートが含まれます。まだ後続ノートを作成していない取得結果も、空のノート一覧として表示します。読み取れないmanifestやノートは、有効なitemを隠さずtop-levelの`warnings`配列で報告します。
 
 ### 進捗ログ
 

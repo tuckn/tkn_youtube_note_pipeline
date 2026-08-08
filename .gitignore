@@ -6,6 +6,6 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 .tmp/
-youtube-notes/
+tkn-youtube-note/
 .tkn/*
 !.tkn/config.example.yaml

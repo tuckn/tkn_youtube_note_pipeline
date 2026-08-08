@@ -1,4 +1,4 @@
-"""Console interface for youtube-notes."""
+"""Console interface for tkn-youtube-note."""
 
 from __future__ import annotations
 
@@ -95,7 +95,7 @@ def _configure_logging(args: argparse.Namespace) -> None:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="youtube-notes")
+    parser = argparse.ArgumentParser(prog="tkn-youtube-note")
     subparsers = parser.add_subparsers(dest="command", required=True)
     ingest_parser = subparsers.add_parser("ingest", help="run raw, source, and summary stages")
     ingest_parser.add_argument("video_url")

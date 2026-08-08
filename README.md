@@ -7,7 +7,7 @@
 For normal use, pass a video URL to one command:
 
 ```console
-youtube-notes ingest "https://www.youtube.com/watch?v=VIDEO_ID"
+tkn-youtube-note ingest "https://www.youtube.com/watch?v=VIDEO_ID"
 ```
 
 ## Requirements
@@ -24,23 +24,23 @@ Install the repository with the following command. Replace `C:\path\to\tkn_youtu
 
 ```console
 uv tool install "C:\path\to\tkn_youtube_note_pipeline"
-youtube-notes config show
+tkn-youtube-note config show
 ```
 
-The second command displays the active configuration and confirms that `youtube-notes` can be run after installation. This installation uses the code as it existed when the command was run and does not automatically track later repository changes.
+The second command displays the active configuration and confirms that `tkn-youtube-note` can be run after installation. This installation uses the code as it existed when the command was run and does not automatically track later repository changes.
 
 Reinstall after every repository update, such as after `git pull`, to make the updated code and dependencies available to the installed command:
 
 ```console
 uv tool install "C:\path\to\tkn_youtube_note_pipeline" --reinstall
-youtube-notes config show
+tkn-youtube-note config show
 ```
 
 Use `--force` only when uv must forcibly recreate the tool installation or replace an existing entry point, such as when an executable conflict or a damaged tool environment prevents the normal `--reinstall` command from succeeding. Use `--reinstall`, not `--force`, for ordinary repository updates:
 
 ```console
 uv tool install "C:\path\to\tkn_youtube_note_pipeline" --force
-youtube-notes config show
+tkn-youtube-note config show
 ```
 
 ### Editable installation for development
@@ -64,8 +64,8 @@ uv tool install -e "C:\path\to\tkn_youtube_note_pipeline" --force
 Initialize the user-global configuration and inspect the effective settings:
 
 ```console
-youtube-notes config init
-youtube-notes config show
+tkn-youtube-note config init
+tkn-youtube-note config show
 ```
 
 `config init` creates the packaged example at `~/.tkn/youtube_note_pipeline/config.yaml` and prints its status and path as JSON. It returns `unchanged` when the same file already exists and refuses to overwrite an edited configuration. Use `./.tkn/config.yaml` for repository-local overrides, or pass any configuration file with `--config`.
@@ -119,7 +119,7 @@ When `model` is set, that model is used for Codex execution. With `model: null`,
 ### Summarize a video
 
 ```console
-youtube-notes ingest "https://www.youtube.com/watch?v=VIDEO_ID"
+tkn-youtube-note ingest "https://www.youtube.com/watch?v=VIDEO_ID"
 ```
 
 This retrieves the captions and creates a source note containing the transcript and a summary note in the selected profile's language. One invocation accepts one video; playlist and channel URLs are not supported.
@@ -127,13 +127,13 @@ This retrieves the captions and creates a source note containing the transcript 
 To create an English summary, change `summary_profile` in configuration or run:
 
 ```console
-youtube-notes ingest "https://www.youtube.com/watch?v=VIDEO_ID" --summary-profile default-en
+tkn-youtube-note ingest "https://www.youtube.com/watch?v=VIDEO_ID" --summary-profile default-en
 ```
 
 Use `--force` when you intentionally want to regenerate and replace the source and summary notes at the same output locations. `--overwrite` has the same meaning.
 
 ```console
-youtube-notes ingest "https://www.youtube.com/watch?v=VIDEO_ID" --force
+tkn-youtube-note ingest "https://www.youtube.com/watch?v=VIDEO_ID" --force
 ```
 
 Because `--force` also replaces reviewed edits, use it only when regeneration is intended. Add `--refresh --force` to retrieve fresh metadata and captions as well.
@@ -142,17 +142,17 @@ Because `--force` also replaces reviewed edits, use it only when regeneration is
 
 | Command | Purpose |
 | --- | --- |
-| `youtube-notes list` | List acquired transcripts and their source and summary notes as JSON |
-| `youtube-notes acquire <video-url>` | Retrieve metadata and captions only |
-| `youtube-notes import-raw --metadata <file> --captions <file>` | Import metadata and captions acquired elsewhere |
-| `youtube-notes build-source <manifest>` | Create a transcript Markdown note from captured captions |
-| `youtube-notes build-summary <source-note>` | Create a summary Markdown note from an existing source note |
-| `youtube-notes validate <artifact>` | Validate a generated artifact |
-| `youtube-notes config show` | Show effective settings and the summary profile |
+| `tkn-youtube-note list` | List acquired transcripts and their source and summary notes as JSON |
+| `tkn-youtube-note acquire <video-url>` | Retrieve metadata and captions only |
+| `tkn-youtube-note import-raw --metadata <file> --captions <file>` | Import metadata and captions acquired elsewhere |
+| `tkn-youtube-note build-source <manifest>` | Create a transcript Markdown note from captured captions |
+| `tkn-youtube-note build-summary <source-note>` | Create a summary Markdown note from an existing source note |
+| `tkn-youtube-note validate <artifact>` | Validate a generated artifact |
+| `tkn-youtube-note config show` | Show effective settings and the summary profile |
 
-Run `youtube-notes <command> --help` to see the options for a command.
+Run `tkn-youtube-note <command> --help` to see the options for a command.
 
-`youtube-notes list` returns one item per video, ordered by the most recent successful capture. Each item includes the latest manifest and captions paths, the number of successful captures, and every source or summary note with the same canonical video URL. Captures that do not yet have derived notes are included with empty note lists. Unreadable manifests or notes are reported in the top-level `warnings` array without hiding valid items.
+`tkn-youtube-note list` returns one item per video, ordered by the most recent successful capture. Each item includes the latest manifest and captions paths, the number of successful captures, and every source or summary note with the same canonical video URL. Captures that do not yet have derived notes are included with empty note lists. Unreadable manifests or notes are reported in the top-level `warnings` array without hiding valid items.
 
 ### Progress logs
 

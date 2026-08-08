@@ -19,7 +19,7 @@ dependencies = [
 ]
 
 [project.scripts]
-youtube-notes = "youtube_note_pipeline.cli:main"
+tkn-youtube-note = "youtube_note_pipeline.cli:main"
 
 [dependency-groups]
 dev = [

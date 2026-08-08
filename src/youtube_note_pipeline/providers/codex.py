@@ -112,7 +112,7 @@ class CodexProvider:
         prompt = render_summary_prompt(self.profile.prompt, request)
         provider_version = self.preflight()
         schema = self.profile.output_schema.schema
-        with tempfile.TemporaryDirectory(prefix="youtube-notes-codex-") as temp:
+        with tempfile.TemporaryDirectory(prefix="tkn-youtube-note-codex-") as temp:
             schema_path = Path(temp) / "summary.schema.json"
             output_path = Path(temp) / "summary.json"
             schema_path.write_text(json.dumps(schema, ensure_ascii=False), encoding="utf-8")
