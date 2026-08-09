@@ -23,24 +23,27 @@ The Python `yt-dlp` package is installed automatically as a dependency, so the s
 Install the repository with the following command. Replace `C:\path\to\tkn_youtube_note_pipeline` with the actual path to this repository.
 
 ```console
-uv tool install "C:\path\to\tkn_youtube_note_pipeline"
-tkn-youtube-note config show
+cd "C:\path\to\tkn_youtube_note_pipeline"
+uv tool install .
+tkn-youtube-note --help
 ```
 
-The second command displays the active configuration and confirms that `tkn-youtube-note` can be run after installation. This installation uses the code as it existed when the command was run and does not automatically track later repository changes.
+The last command confirms that `tkn-youtube-note` can be run after installation. This installation uses the code as it existed when the command was run and does not automatically track later repository changes.
 
 Reinstall after every repository update, such as after `git pull`, to make the updated code and dependencies available to the installed command:
 
 ```console
-uv tool install "C:\path\to\tkn_youtube_note_pipeline" --reinstall
-tkn-youtube-note config show
+cd "C:\path\to\tkn_youtube_note_pipeline"
+uv tool install . --reinstall
+tkn-youtube-note --help
 ```
 
 Use `--force` only when uv must forcibly recreate the tool installation or replace an existing entry point, such as when an executable conflict or a damaged tool environment prevents the normal `--reinstall` command from succeeding. Use `--reinstall`, not `--force`, for ordinary repository updates:
 
 ```console
-uv tool install "C:\path\to\tkn_youtube_note_pipeline" --force
-tkn-youtube-note config show
+cd "C:\path\to\tkn_youtube_note_pipeline"
+uv tool install . --force
+tkn-youtube-note --help
 ```
 
 ### Editable installation for development
@@ -48,7 +51,8 @@ tkn-youtube-note config show
 Use an editable installation during development when source-code changes must be reflected in the CLI immediately:
 
 ```console
-uv tool install -e "C:\path\to\tkn_youtube_note_pipeline" --reinstall
+cd "C:\path\to\tkn_youtube_note_pipeline"
+uv tool install -e . --reinstall
 ```
 
 The `-e` (`--editable`) option makes the installed command reference the repository source code directly, so source-code edits take effect without reinstallation. If an update changes dependencies in `pyproject.toml`, package metadata, or entry points, or if the repository folder is moved or renamed, run the same editable installation command again to update the tool environment and repository reference.
@@ -56,7 +60,8 @@ The `-e` (`--editable`) option makes the installed command reference the reposit
 To repair an editable installation while preserving editable mode, use:
 
 ```console
-uv tool install -e "C:\path\to\tkn_youtube_note_pipeline" --force
+cd "C:\path\to\tkn_youtube_note_pipeline"
+uv tool install -e . --force
 ```
 
 ## Configuration

@@ -23,24 +23,27 @@ Python版`yt-dlp`はdependencyとして自動的にインストールされる�
 次のコマンドでインストールします。例示している`C:\path\to\tkn_youtube_note_pipeline`は、このリポジトリの実際のフォルダパスに置き換えてください。
 
 ```console
-uv tool install "C:\path\to\tkn_youtube_note_pipeline"
-tkn-youtube-note config show
+cd "C:\path\to\tkn_youtube_note_pipeline"
+uv tool install .
+tkn-youtube-note --help
 ```
 
-2つ目のコマンドは、インストール後に現在の設定を表示し、`tkn-youtube-note`を実行できることを確認します。この方式では、インストール時点のコードが使用され、その後のリポジトリの変更は自動的に反映されません。
+最後のコマンドは、インストール後に`tkn-youtube-note`を実行できることを確認します。この方式では、インストール時点のコードが使用され、その後のリポジトリの変更は自動的に反映されません。
 
 `git pull`などでリポジトリを更新するたびに、更新後のコードと依存モジュールをインストール済みのコマンドへ反映するため、次のコマンドで再インストールしてください。
 
 ```console
-uv tool install "C:\path\to\tkn_youtube_note_pipeline" --reinstall
-tkn-youtube-note config show
+cd "C:\path\to\tkn_youtube_note_pipeline"
+uv tool install . --reinstall
+tkn-youtube-note --help
 ```
 
 `--force`は、実行ファイルの競合やtool環境の破損によって通常の`--reinstall`が成功せず、uvにtool installationの強制作成や既存entry pointの置き換えをさせる必要がある場合に限って使用します。通常のリポジトリ更新には、`--force`ではなく`--reinstall`を使用してください。
 
 ```console
-uv tool install "C:\path\to\tkn_youtube_note_pipeline" --force
-tkn-youtube-note config show
+cd "C:\path\to\tkn_youtube_note_pipeline"
+uv tool install . --force
+tkn-youtube-note --help
 ```
 
 ### 開発用のeditable installation
@@ -48,7 +51,8 @@ tkn-youtube-note config show
 開発時にソースコードの変更をすぐCLIへ反映したい場合は、editable installationを使用します。
 
 ```console
-uv tool install -e "C:\path\to\tkn_youtube_note_pipeline" --reinstall
+cd "C:\path\to\tkn_youtube_note_pipeline"
+uv tool install -e . --reinstall
 ```
 
 `-e`（`--editable`）を指定すると、インストールされたコマンドはリポジトリ内のソースコードを直接参照するため、ソースコードの変更は再インストールせずに反映されます。ただし、更新によって`pyproject.toml`の依存関係、package metadata、entry pointが変更された場合や、リポジトリのフォルダを移動または名前変更した場合は、tool環境とリポジトリへの参照を更新するため、同じeditable installationのコマンドを再実行してください。
@@ -56,7 +60,8 @@ uv tool install -e "C:\path\to\tkn_youtube_note_pipeline" --reinstall
 editable installationをeditableのまま修復する場合は、次のコマンドを使用します。
 
 ```console
-uv tool install -e "C:\path\to\tkn_youtube_note_pipeline" --force
+cd "C:\path\to\tkn_youtube_note_pipeline"
+uv tool install -e . --force
 ```
 
 ## 設定
