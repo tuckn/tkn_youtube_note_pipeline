@@ -104,8 +104,8 @@ codex_executable: codex
 
 | 設定 | 保存する内容 |
 | --- | --- |
-| `raw_root` | 取得したmetadataと字幕 |
-| `source_root` | 字幕全文を含むMarkdownノート |
+| `raw_root` | 取得したraw metadata、字幕データ、manifest |
+| `source_root` | 人が読みやすい文字起こしMarkdown sourceノート |
 | `summary_root` | 要約Markdownノート |
 | `reports_root` | 実行結果のJSON report |
 
@@ -127,7 +127,29 @@ Windowsで自動処理とinteractive PowerShellが異なる`codex`を解決す�
 tkn-youtube-note ingest "https://www.youtube.com/watch?v=VIDEO_ID"
 ```
 
-字幕を取得し、字幕全文のMarkdownノートと、選択したprofileの言語による要約Markdownノートを作成します。1回の実行で指定できるのは1本の動画です。playlist URLとchannel URLには対応していません。
+raw字幕データと動画metadataを取得し、人が読みやすい文字起こしMarkdown sourceノートへ整形してから、選択したprofileの言語によるsummary Markdownノートを作成します。1回の実行で指定できるのは1本の動画です。playlist URLとchannel URLには対応していません。
+
+#### `ingest`の処理フロー
+
+`ingest`は、次の単独コマンドが提供するものと同じ内部処理を順番にorchestrateします。これらのCLIコマンドを別processとして起動するわけではありません。
+
+| Stage | 対応する単独コマンド | 入力 | 出力 | 生成AI |
+| --- | --- | --- | --- | --- |
+| 1. 取得 | `acquire <video-url>` | YouTube動画URL | immutableなraw metadata、字幕データ（`captions.<language>.json3`）、`manifest.json` | 不使用 |
+| 2. Source構築 | `build-source <manifest>` | 取得済みraw字幕データを参照するmanifest | 検証済みで人が読みやすい文字起こしMarkdown sourceノート | 不使用 |
+| 3. Summary構築 | `build-summary <source-note>` | 文字起こしMarkdown sourceノート | 選択したprofileで生成したsummary Markdownノート | 使用 |
+
+```text
+YouTube URL
+  -> acquire
+  -> raw metadata + raw字幕データ + manifest
+  -> build-source
+  -> 文字起こしMarkdown sourceノート
+  -> build-summary
+  -> summary Markdownノート
+```
+
+途中のstageが失敗した場合、`ingest`はそこで停止し、後続stageのartifactを作成しません。run reportには失敗前に完了したstageを記録します。通常の再実行では、新たに取得した内容が同一なら既存のraw captureを再利用し、検証済みで最新のノートは変更しません。`--refresh`は内容が同一でもstage 1で新しいraw captureを保存し、`--force`はstage 2・3のsource・summaryノートを置き換え、`--refresh --force`は両方を実行します。
 
 英語で要約する場合は、configの`summary_profile`を変更するか、次のように指定します。
 
@@ -141,23 +163,23 @@ tkn-youtube-note ingest "https://www.youtube.com/watch?v=VIDEO_ID" --summary-pro
 tkn-youtube-note ingest "https://www.youtube.com/watch?v=VIDEO_ID" --force
 ```
 
-`--force`はreview済みの編集も置き換えるため、再生成してよい場合だけ使用してください。metadataと字幕も新しく取得する場合は`--refresh --force`を指定します。
+`--force`はreview済みの編集も置き換えるため、再生成してよい場合だけ使用してください。raw metadata・字幕データを新しいcaptureとして保存し、両方のノートも再生成する場合は`--refresh --force`を指定します。
 
 ### その他のコマンド
 
 | コマンド | 用途 |
 | --- | --- |
-| `tkn-youtube-note list` | 取得済み文字起こしと対応するsource・summaryノートをJSONで一覧表示 |
-| `tkn-youtube-note acquire <video-url>` | metadataと字幕だけを取得 |
-| `tkn-youtube-note import-raw --metadata <file> --captions <file>` | 別の方法で取得したmetadataと字幕を取り込み |
-| `tkn-youtube-note build-source <manifest>` | 取得済み字幕から字幕全文のMarkdownノートを作成 |
-| `tkn-youtube-note build-summary <source-note>` | 既存のsourceノートから要約Markdownノートを作成 |
+| `tkn-youtube-note list` | 取得に成功したraw字幕データと対応するsource・summaryノートをJSONで一覧表示 |
+| `tkn-youtube-note acquire <video-url>` | Markdownノートを作らず、動画のraw metadataと字幕データを取得 |
+| `tkn-youtube-note import-raw --metadata <file> --captions <file>` | 別の方法で取得したraw metadataと字幕データを取り込み |
+| `tkn-youtube-note build-source <manifest>` | 取得済みraw字幕データを検証し、人が読みやすい文字起こしMarkdown sourceノートへ整形 |
+| `tkn-youtube-note build-summary <source-note>` | 文字起こしMarkdown sourceノートからsummary Markdownノートを作成 |
 | `tkn-youtube-note validate <artifact>` | 生成物を検証 |
 | `tkn-youtube-note config show` | 有効な設定とsummary profileを表示 |
 
 各コマンドのoptionは`tkn-youtube-note <command> --help`で確認できます。
 
-`tkn-youtube-note list`は動画ごとに1件を、最新の取得日時から順に返します。各itemには、最新のmanifest・字幕path、成功した取得回数、同じcanonical video URLを持つすべてのsource・summaryノートが含まれます。まだ後続ノートを作成していない取得結果も、空のノート一覧として表示します。読み取れないmanifestやノートは、有効なitemを隠さずtop-levelの`warnings`配列で報告します。
+`tkn-youtube-note list`は動画ごとに1件を、最新の取得日時から順に返します。各itemには、最新のmanifest・raw字幕データのpath、成功した取得回数、同じcanonical video URLを持つすべてのsource・summaryノートが含まれます。まだ後続ノートを作成していない取得結果も、空のノート一覧として表示します。読み取れないmanifestやノートは、有効なitemを隠さずtop-levelの`warnings`配列で報告します。
 
 ### 進捗ログ
 
@@ -189,13 +211,13 @@ uv build
 
 ### 内部の処理とartifact
 
-`ingest`は次のstageを順に実行します。
+raw字幕データと文字起こしMarkdown sourceノートは同じ発話全文を保持しますが、異なるartifactです。raw JSON3データは機械処理用の取得eventを保持し、sourceノートは人による閲覧と後続の要約処理に適したmetadata・timestamp付き段落を加えます。`ingest`は使い方の節で説明した3つのstageを順番に実行します。
 
 ```text
 YouTube URL
-  -> raw metadata・字幕・manifest
-  -> Transcriptを含むsource Markdown
-  -> structured outputを経由したsummary Markdown
+  -> raw metadata・raw字幕データ・manifest
+  -> 文字起こしMarkdown sourceノート
+  -> structured outputを経由したsummary Markdownノート
 ```
 
 各raw captureは`<raw-root>/<video-id>/<captured-at>/`に`metadata.info.json`、`captions.<language>.json3`、`manifest.json`として保存します。manifestはschema version、hash、caption track、tool version、canonical URL、成功・失敗を記録します。字幕取得に失敗した場合はsource・summaryノートを作りません。

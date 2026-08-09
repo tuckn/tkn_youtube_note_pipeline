@@ -104,8 +104,8 @@ Ordinary relative output paths are resolved from the current working directory. 
 
 | Setting | Stored content |
 | --- | --- |
-| `raw_root` | Retrieved metadata and captions |
-| `source_root` | Markdown notes containing transcripts |
+| `raw_root` | Retrieved raw metadata, caption data, and manifests |
+| `source_root` | Human-readable transcript Markdown source notes |
 | `summary_root` | Summary Markdown notes |
 | `reports_root` | JSON run reports |
 
@@ -127,7 +127,29 @@ When `model` is set, that model is used for Codex execution. With `model: null`,
 tkn-youtube-note ingest "https://www.youtube.com/watch?v=VIDEO_ID"
 ```
 
-This retrieves the captions and creates a source note containing the transcript and a summary note in the selected profile's language. One invocation accepts one video; playlist and channel URLs are not supported.
+This retrieves raw caption data and video metadata, renders a human-readable transcript Markdown source note, and creates a summary Markdown note in the selected profile's language. One invocation accepts one video; playlist and channel URLs are not supported.
+
+#### `ingest` workflow
+
+`ingest` orchestrates the same internal processing exposed by the following standalone commands. It does not start these CLI commands as separate subprocesses.
+
+| Stage | Equivalent standalone command | Input | Output | Generative AI |
+| --- | --- | --- | --- | --- |
+| 1. Acquire | `acquire <video-url>` | YouTube video URL | Immutable raw metadata, caption data (`captions.<language>.json3`), and `manifest.json` | No |
+| 2. Build source | `build-source <manifest>` | A manifest referencing acquired raw caption data | A validated, human-readable transcript Markdown source note | No |
+| 3. Build summary | `build-summary <source-note>` | The transcript Markdown source note | A summary Markdown note generated with the selected profile | Yes |
+
+```text
+YouTube URL
+  -> acquire
+  -> raw metadata + raw caption data + manifest
+  -> build-source
+  -> transcript Markdown source note
+  -> build-summary
+  -> summary Markdown note
+```
+
+If a stage fails, `ingest` stops and does not create artifacts from later stages. Its run report records the stages that completed before the failure. A normal rerun reuses the existing raw capture when the newly retrieved content is identical and keeps valid current notes unchanged. `--refresh` stores a new raw capture in stage 1 even when its content is identical, `--force` replaces source and summary notes in stages 2 and 3, and `--refresh --force` performs both operations.
 
 To create an English summary, change `summary_profile` in configuration or run:
 
@@ -141,23 +163,23 @@ Use `--force` when you intentionally want to regenerate and replace the source a
 tkn-youtube-note ingest "https://www.youtube.com/watch?v=VIDEO_ID" --force
 ```
 
-Because `--force` also replaces reviewed edits, use it only when regeneration is intended. Add `--refresh --force` to retrieve fresh metadata and captions as well.
+Because `--force` also replaces reviewed edits, use it only when regeneration is intended. Use `--refresh --force` to store a new raw metadata and caption capture and regenerate both notes.
 
 ### Other commands
 
 | Command | Purpose |
 | --- | --- |
-| `tkn-youtube-note list` | List acquired transcripts and their source and summary notes as JSON |
-| `tkn-youtube-note acquire <video-url>` | Retrieve metadata and captions only |
-| `tkn-youtube-note import-raw --metadata <file> --captions <file>` | Import metadata and captions acquired elsewhere |
-| `tkn-youtube-note build-source <manifest>` | Create a transcript Markdown note from captured captions |
-| `tkn-youtube-note build-summary <source-note>` | Create a summary Markdown note from an existing source note |
+| `tkn-youtube-note list` | List successful raw caption captures and their source and summary notes as JSON |
+| `tkn-youtube-note acquire <video-url>` | Retrieve raw video metadata and caption data without creating Markdown notes |
+| `tkn-youtube-note import-raw --metadata <file> --captions <file>` | Import raw metadata and caption data acquired elsewhere |
+| `tkn-youtube-note build-source <manifest>` | Validate acquired raw caption data and render a human-readable transcript Markdown source note |
+| `tkn-youtube-note build-summary <source-note>` | Create a summary Markdown note from a transcript Markdown source note |
 | `tkn-youtube-note validate <artifact>` | Validate a generated artifact |
 | `tkn-youtube-note config show` | Show effective settings and the summary profile |
 
 Run `tkn-youtube-note <command> --help` to see the options for a command.
 
-`tkn-youtube-note list` returns one item per video, ordered by the most recent successful capture. Each item includes the latest manifest and captions paths, the number of successful captures, and every source or summary note with the same canonical video URL. Captures that do not yet have derived notes are included with empty note lists. Unreadable manifests or notes are reported in the top-level `warnings` array without hiding valid items.
+`tkn-youtube-note list` returns one item per video, ordered by the most recent successful capture. Each item includes the latest manifest and raw caption-data paths, the number of successful captures, and every source or summary note with the same canonical video URL. Captures that do not yet have derived notes are included with empty note lists. Unreadable manifests or notes are reported in the top-level `warnings` array without hiding valid items.
 
 ### Progress logs
 
@@ -188,13 +210,13 @@ explicit operations and are not run in CI.
 
 ### Internal processing and artifacts
 
-`ingest` runs these stages in order:
+The raw caption data and transcript Markdown source note preserve the same complete spoken text, but they are different artifacts: the raw JSON3 data retains acquisition events for machine processing, while the source note adds metadata and readable timestamped paragraphs for people and downstream summarization. `ingest` runs the three stages documented in the usage section in order:
 
 ```text
 YouTube URL
-  -> raw metadata, captions, and manifest
-  -> source Markdown containing the transcript
-  -> summary Markdown generated through structured output
+  -> raw metadata, raw caption data, and manifest
+  -> transcript Markdown source note
+  -> summary Markdown note generated through structured output
 ```
 
 Each raw capture is stored below `<raw-root>/<video-id>/<captured-at>/` as `metadata.info.json`, `captions.<language>.json3`, and `manifest.json`. The manifest records schema version, hashes, caption track, tool version, canonical URL, and success or failure. A failed caption acquisition does not produce source or summary notes.
