@@ -1,7 +1,7 @@
 ---
 type: prompt
 id: 26fd2b30-a746-4a4e-85de-94642435d7ab
-version: "1.1"
+version: "1.2"
 ---
 
 # Default English YouTube summary instructions
@@ -41,6 +41,10 @@ claims, reasoning, concrete examples, and conclusion without watching it.
 - Prefer a compact, scannable knowledge note over an exhaustive mini-essay.
 - Keep the overview, detailed structure, key points, glossary, and conclusion
   distinct. Do not repeat the same explanation across multiple fields.
+- For literary, narrative, documentary, or case-study content, distinguish the
+  speaker's interpretive thesis from the story, characters, and events used to
+  convey it. Treat narrative material as evidence or illustration, and center
+  the reader-facing synthesis on the video's transferable claims.
 
 ## Structured fields
 
@@ -49,15 +53,22 @@ claims, reasoning, concrete examples, and conclusion without watching it.
 - `summary`: one English paragraph of roughly 120–200 words. State the
   central thesis, two or three essential relationships in its reasoning, and
   the result. Leave detailed examples, study names, and secondary qualifications
-  to `structuring` unless they are indispensable to the thesis.
+  to `structuring` unless they are indispensable to the thesis. For a work
+  review or narrative explanation, lead with what the speaker argues the work
+  means rather than with its premise, sequence, or ending.
 - `structuring`: normally create 3–6 major sections ordered from abstract to
   concrete. Each major section becomes an H3 heading. Use `subsections` for
   meaningful H4-level middle categories, normally 1–3 per major section, and
   put concise substantive facts in their `details`. For a genuinely simple
   section, use direct `details` and return an empty `subsections` list. Avoid a
   flat series of many equally weighted headings and avoid one long paragraph in
-  a bullet.
+  a bullet. Narrative details may remain here as evidence, but group them by
+  thematic function and omit minor plot navigation that does not support the
+  video's argument.
 - `key_points`: select roughly 5–8 of the most important claims or examples.
+  Prefer interpretive claims, mechanisms, and transferable insights. Include a
+  plot event or character action only when it is indispensable evidence for one
+  of those points.
   Add a timestamp only when that timestamp is explicitly present in the
   transcript and actually supports the point. The renderer places timestamp
   links before the point text.
@@ -70,7 +81,10 @@ claims, reasoning, concrete examples, and conclusion without watching it.
   video. Do not begin routinely with phrases such as “the video says” or mix the
   video's broader claims or conclusion into the definition. Mention the video's
   use only when it is nonstandard or essential to disambiguation. Do not
-  substitute external dictionary knowledge.
+  substitute external dictionary knowledge. Prefer reusable concepts,
+  mechanisms, and interpretive frameworks over character names, locations, or
+  plot devices. Include a story-specific symbol only when it is indispensable
+  to the thesis, and define its thematic role rather than merely identifying it.
 - `conclusion`: normally write two or three short English paragraphs totaling
   roughly 140–240 words. In the first paragraph, state the video's final
   conclusion as a standalone takeaway that remains meaningful when compacted
@@ -79,7 +93,10 @@ claims, reasoning, concrete examples, and conclusion without watching it.
   meaning the speaker gives it. Add a third paragraph only when the source
   explicitly provides a practical implication, recommendation, or important
   final qualification. Do not merely repeat the full `summary`, list earlier
-  details again, or add advice that the speaker did not provide.
+  details again, or add advice that the speaker did not provide. For a work
+  review or narrative explanation, state the video's interpretive thesis first;
+  use the story's ending only as supporting evidence, not as the frame for the
+  conclusion.
 
 Timestamps must refer only to timestamps present in the transcript. Never
 invent, interpolate, or assign a timestamp based only on topic order.

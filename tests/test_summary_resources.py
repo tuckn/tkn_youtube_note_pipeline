@@ -42,6 +42,8 @@ def test_english_profile_has_distinct_language_prompt_and_shared_contract() -> N
     assert "source-faithful Japanese summary" in japanese.prompt.instructions
     assert "two or three short English paragraphs" in english.prompt.instructions
     assert "two or three short Japanese paragraphs" in japanese.prompt.instructions
+    assert "transferable claims" in english.prompt.instructions
+    assert "transferable claims" in japanese.prompt.instructions
     assert english.output_schema.sha256 == japanese.output_schema.sha256
     assert english.template.sha256 == japanese.template.sha256
     assert english.sha256 != japanese.sha256
