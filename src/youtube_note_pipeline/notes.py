@@ -18,6 +18,7 @@ from youtube_note_pipeline.summary_resources import (
     SummaryProfile,
     render_summary_template,
 )
+from youtube_note_pipeline.thumbnails import standard_thumbnail_url
 
 SOURCE_NOTE_SCHEMA_VERSION = "1.0"
 DESCRIPTION_MAX_CHARS = 240
@@ -104,7 +105,8 @@ def update_source_description(text: str, description: str, updated: datetime) ->
 
 
 def _cover_url(video: VideoSource) -> str:
-    return video.thumbnail or f"https://i.ytimg.com/vi/{video.video_id}/maxresdefault.jpg"
+    # Summaries inherit the source cover, including existing notes.
+    return video.thumbnail or standard_thumbnail_url(video.video_id)
 
 
 def render_source(
@@ -127,7 +129,7 @@ def render_source(
         f"schemaVersion: {yaml_quote(SOURCE_NOTE_SCHEMA_VERSION)}",
         f"title: {yaml_quote(video.title)}",
         'description: ""',
-        f"cover: {_cover_url(video)}",
+        f"cover: {standard_thumbnail_url(video.video_id)}",
         f"url: {video.canonical_url}",
         "linkStatus: active",
         "domain: youtube.com",

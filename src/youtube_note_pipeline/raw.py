@@ -21,6 +21,7 @@ from youtube_note_pipeline.models import (
     RawCaptureManifest,
     VideoSource,
 )
+from youtube_note_pipeline.thumbnails import standard_thumbnail_url
 
 VIDEO_ID = re.compile(r"^[A-Za-z0-9_-]{11}$")
 
@@ -64,8 +65,9 @@ def _published(info: dict[str, Any]) -> str:
 
 def video_source(info: dict[str, Any], canonical_url: str) -> VideoSource:
     author = info.get("uploader") or info.get("channel")
+    video_id = str(info.get("id") or canonical_video_url(canonical_url)[0])
     return VideoSource(
-        video_id=str(info.get("id") or canonical_video_url(canonical_url)[0]),
+        video_id=video_id,
         canonical_url=canonical_url,
         title=str(info.get("title") or "").strip(),
         description=str(info.get("description") or ""),
@@ -73,7 +75,7 @@ def video_source(info: dict[str, Any], canonical_url: str) -> VideoSource:
         author_url=info.get("uploader_url") or info.get("channel_url"),
         published=_published(info),
         duration_seconds=float(info["duration"]) if info.get("duration") is not None else None,
-        thumbnail=info.get("thumbnail"),
+        thumbnail=standard_thumbnail_url(video_id),
         original_language=info.get("language") or info.get("original_language"),
     )
 

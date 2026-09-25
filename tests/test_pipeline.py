@@ -684,3 +684,42 @@ def test_current_summary_remains_valid_after_nouns_metadata_is_added(
         tmp_path / "summary",
         FakeProvider(),
     ).status == "unchanged"
+
+
+@pytest.mark.parametrize("existing_source", [False, True])
+def test_legacy_localized_thumbnail_builds_standard_cover(
+    tmp_path: Path, existing_source: bool,
+) -> None:
+    manifest_path = import_raw(
+        FIXTURES / "metadata.info.json", FIXTURES / "captions.ja.json3", tmp_path / "raw",
+    )
+    localized = "https://i.ytimg.com/vi_lc/TESTVID0001/maxresdefault_en-US.jpg"
+    standard = "https://i.ytimg.com/vi/TESTVID0001/maxresdefault.jpg"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["video"]["thumbnail"] = localized
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    raw_before = {path.name: path.read_bytes() for path in manifest_path.parent.iterdir()}
+    if existing_source:
+        initial = build_source(manifest_path, tmp_path / "source")
+        initial.path.write_text(
+            initial.path.read_text(encoding="utf-8").replace(standard, localized),
+            encoding="utf-8",
+        )
+        original = initial.path.read_bytes()
+        assert build_source(manifest_path, tmp_path / "source").status == "unchanged"
+        assert initial.path.read_bytes() == original
+        legacy_summary = build_summary(initial.path, tmp_path / "legacy-summary", FakeProvider())
+        assert validate_summary(legacy_summary.path, tmp_path / "source") == []
+        legacy_metadata, _ = split_note(legacy_summary.path.read_text(encoding="utf-8"))
+        assert legacy_metadata["cover"] == localized
+    source = build_source(manifest_path, tmp_path / "source", overwrite=existing_source)
+    source_metadata, _ = split_note(source.path.read_text(encoding="utf-8"))
+    assert source_metadata["cover"] == standard
+    summary = build_summary(source.path, tmp_path / "summary", FakeProvider())
+    summary_metadata, _ = split_note(summary.path.read_text(encoding="utf-8"))
+    assert summary_metadata["cover"] == standard
+    assert validate_source(source.path) == []
+    assert validate_summary(summary.path, tmp_path / "source") == []
+    assert raw_before == {
+        path.name: path.read_bytes() for path in manifest_path.parent.iterdir()
+    }
