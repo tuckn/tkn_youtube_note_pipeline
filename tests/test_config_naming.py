@@ -36,7 +36,7 @@ def test_config_precedence(tmp_path: Path, monkeypatch) -> None:
         explicit_config=explicit,
         overrides={"raw_root": tmp_path / "cli-raw"},
     )
-    assert resolved.config.provider == "codex"
+    assert resolved.config.generation.selected.legacy_provider == "codex"
     assert resolved.config.raw_root == tmp_path / "cli-raw"
     assert resolved.config.source_root == tmp_path / "explicit-source"
     assert resolved.config.summary_root == configured_root / "data" / "summary"

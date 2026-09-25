@@ -95,7 +95,7 @@ def test_config_show_reports_prompt_provenance(
 
     assert main(["config", "show", "--quiet"]) == 0
     payload = json.loads(capsys.readouterr().out)
-    assert payload["values"]["summary_profile"] == "default-ja"
+    assert payload["values"]["generation"]["summary_profile"] == "default-ja"
     profile = payload["values"]["summary_profile_details"]
     assert profile["name"] == "default-ja"
     assert profile["source"].endswith("summary_profiles/default-ja")
@@ -124,7 +124,7 @@ def test_config_show_uses_summary_profile_cli_override(tmp_path: Path, monkeypat
 
     assert main(["config", "show", "--summary-profile", "default-en", "--quiet"]) == 0
     payload = json.loads(capsys.readouterr().out)
-    assert payload["values"]["summary_profile"] == "default-en"
+    assert payload["values"]["generation"]["summary_profile"] == "default-en"
     assert payload["values"]["summary_profile_details"]["name"] == "default-en"
 
 
@@ -140,12 +140,12 @@ def test_config_init_is_idempotent_and_refuses_edited_file(
     assert main(["config", "init", "--quiet"]) == 0
     created = json.loads(capsys.readouterr().out)
     assert created == {"status": "created", "path": str(target)}
-    assert "provider: codex" in target.read_text(encoding="utf-8")
+    assert "bridge_profile: codex-default" in target.read_text(encoding="utf-8")
     assert "summary_profile: default-ja" in target.read_text(encoding="utf-8")
 
     assert main(["config", "show", "--quiet"]) == 0
     shown = json.loads(capsys.readouterr().out)
-    assert shown["values"]["provider"] == "codex"
+    assert shown["values"]["generation"]["profiles"]["codex"]["bridge_profile"] == "codex-default"
     assert shown["values"]["fallback_languages"] == []
 
     assert main(["config", "init", "--quiet"]) == 0

@@ -12,9 +12,16 @@ from youtube_note_pipeline.summary_resources import SummaryProfile
 class ProviderExecutionError(RuntimeError):
     """Provider failure with concise user text and optional full diagnostics."""
 
-    def __init__(self, message: str, diagnostic_output: str | None = None) -> None:
+    def __init__(
+        self,
+        message: str,
+        diagnostic_output: str | None = None,
+        *,
+        error_details: dict[str, Any] | None = None,
+    ) -> None:
         super().__init__(message)
         self.diagnostic_output = diagnostic_output
+        self.error_details = error_details
 
 
 @dataclass(frozen=True)
@@ -35,9 +42,12 @@ class ProviderResult:
     template_id: str | None = None
     template_version: str | None = None
     template_sha256: str | None = None
+    generation_record: dict[str, Any] | None = None
 
 
 class SummaryProvider(Protocol):
     profile: SummaryProfile
+
+    def plan(self, request: SummaryRequest | None = None) -> dict[str, Any]: ...
 
     def generate(self, request: SummaryRequest) -> ProviderResult: ...

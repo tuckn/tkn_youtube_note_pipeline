@@ -28,7 +28,7 @@ from youtube_note_pipeline.notes import (
     transcript_from_source,
 )
 from youtube_note_pipeline.prompting import PROMPT_ENVELOPE_VERSION
-from youtube_note_pipeline.providers import CodexProvider, ProviderExecutionError, SummaryProvider
+from youtube_note_pipeline.providers import BridgeProvider, ProviderExecutionError, SummaryProvider
 from youtube_note_pipeline.raw import acquire, canonical_video_url, import_raw
 from youtube_note_pipeline.validation import (
     validate_manifest,
@@ -369,6 +369,12 @@ def build_summary(
                 logger.info("Summary generation resources changed; updating %s", target)
     transcript = transcript_from_source(source_path.read_text(encoding="utf-8"))
     input_hash = hashlib.sha256(transcript.encode("utf-8")).hexdigest()
+    request = SummaryRequest(
+        video=video,
+        transcript=transcript,
+        prompt_version=PROMPT_ENVELOPE_VERSION,
+        input_hash=input_hash,
+    )
     if dry_run:
         if existing_metadata and existing_metadata.get("date"):
             _frontmatter_datetime(existing_metadata["date"])
@@ -382,14 +388,9 @@ def build_summary(
                 "input_hash": input_hash,
                 "ai_execution": "not_run",
                 "summary_profile": profile.name,
+                "bridge_plan": provider.plan(request),
             },
         )
-    request = SummaryRequest(
-        video=video,
-        transcript=transcript,
-        prompt_version=PROMPT_ENVELOPE_VERSION,
-        input_hash=input_hash,
-    )
     logger.info("Generating structured summary with the configured provider")
     result = provider.generate(request)
     expected_result_provenance = {
@@ -446,6 +447,7 @@ def build_summary(
             "provider": result.provider,
             "model": result.model,
             "provider_version": result.provider_version,
+            "generation_record": result.generation_record,
             "prompt_id": result.prompt_id,
             "prompt_version": result.prompt_version,
             "prompt_envelope_version": result.prompt_envelope_version,
@@ -464,13 +466,12 @@ def build_summary(
 
 
 def _provider(config: PipelineConfig) -> SummaryProvider:
-    if config.provider != "codex":
-        raise ValueError(f"unsupported provider in v1: {config.provider}")
-    return CodexProvider(
-        config.codex_executable,
-        config.model,
+    selected = config.generation.selected
+    return BridgeProvider(
+        selected.bridge_profile,
         config.summary_profile,
-        timeout_seconds=config.provider_timeout_seconds,
+        overrides=selected.overrides,
+        legacy_provider=selected.legacy_provider,
     )
 
 
@@ -481,6 +482,7 @@ def write_report(
     error: str | None = None,
     *,
     diagnostic_output: str | None = None,
+    provider_error: dict[str, Any] | None = None,
 ) -> Path:
     now = datetime.now().astimezone()
     run_id = f"{now.strftime('%Y%m%dT%H%M%S%z')}_{uuid.uuid4().hex[:8]}"
@@ -491,12 +493,13 @@ def write_report(
         atomic_write(diagnostic_path, diagnostic_output)
         logger.debug("Provider diagnostic log written: %s", diagnostic_path)
     payload = {
-        "schema_version": "1.1",
+        "schema_version": "1.2",
         "run_id": run_id,
         "command": command,
         "started_at": now.isoformat(timespec="seconds"),
         "status": "failure" if error else "success",
         "error": error,
+        "provider_error": provider_error,
         "diagnostic_log": str(diagnostic_path) if diagnostic_path else None,
         "stages": [
             {"path": str(stage.path), "status": stage.status, "details": stage.details}
@@ -606,6 +609,7 @@ def ingest(
             stages,
             str(exc),
             diagnostic_output=diagnostic_output,
+            provider_error=exc.error_details if isinstance(exc, ProviderExecutionError) else None,
         )
         raise RuntimeError(f"{exc}; report={report}") from exc
     report = write_report(config, "ingest", stages)

@@ -1,11 +1,32 @@
+schema_version: "1.0.0"
+
+# Application-owned storage. Changing roots does not move existing files.
 raw_root: ~/.tkn/youtube_note_pipeline/data/raw
 source_root: ~/.tkn/youtube_note_pipeline/data/source
 summary_root: ~/.tkn/youtube_note_pipeline/data/summary
 reports_root: ~/.tkn/youtube_note_pipeline/state/reports
 
-provider: codex
-model: null
-summary_profile: default-ja
+# Caption acquisition is independent of the AI used for summary generation.
+# Try these languages when captions in the original language are unavailable.
 fallback_languages: []
-codex_executable: codex
-provider_timeout_seconds: 600
+
+generation:
+  # Built-in summary resources: default-ja (Japanese) or default-en (English).
+  summary_profile: default-ja
+
+  # Connection/model/authentication are managed in ~/.tkn/genai_bridge/config.yaml.
+  # Choose a local application profile with --profile <name>.
+  active_profile: codex
+  profiles:
+    codex:
+      bridge_profile: codex-default
+
+    # Define local-notes in Bridge before selecting this application profile.
+    # local:
+    #   bridge_profile: local-notes
+
+    # Optional application-specific overrides; shared settings remain unchanged.
+    # codex-long:
+    #   bridge_profile: codex-default
+    #   overrides:
+    #     timeout_seconds: 1800

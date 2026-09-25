@@ -1,5 +1,4 @@
 import json
-import subprocess
 from dataclasses import replace
 from pathlib import Path
 from unittest.mock import Mock
@@ -13,8 +12,6 @@ from youtube_note_pipeline.contracts import summary_currency
 from youtube_note_pipeline.migration import apply_migration, patch_metadata, plan_migration
 from youtube_note_pipeline.naming import path_to_file_uri
 from youtube_note_pipeline.notes import split_note
-from youtube_note_pipeline.providers import ProviderExecutionError
-from youtube_note_pipeline.providers.codex import CodexProvider
 from youtube_note_pipeline.raw import import_raw
 from youtube_note_pipeline.summary_resources import load_summary_profile, validate_summary_document
 from youtube_note_pipeline.validation import validate_summary
@@ -229,30 +226,12 @@ def test_import_stage_reports_unchanged_when_capture_reused(setup_notes):
     assert result.status == "unchanged"
 
 
-def test_timeout_is_configurable_and_retains_partial_diagnostics(monkeypatch):
-    from test_codex_provider import request
-
-    def fake_run(command, **kwargs):
-        if command[-1] == "--version":
-            return Mock(returncode=0, stdout="fixture", stderr="")
-        assert kwargs["timeout"] == 42
-        raise subprocess.TimeoutExpired(
-            command, 42, output=b"partial stdout", stderr=b"partial stderr"
-        )
-
-    monkeypatch.setattr(subprocess, "run", fake_run)
-    with pytest.raises(ProviderExecutionError, match="timed out after 42") as exc:
-        CodexProvider(timeout_seconds=42).generate(request())
-    assert "partial stdout" in exc.value.diagnostic_output
-    assert "partial stderr" in exc.value.diagnostic_output
-    assert "partial stdout" not in str(exc.value)
-
-
 @pytest.mark.parametrize("timeout", [0, -1, float("inf"), float("nan")])
 def test_provider_timeout_rejects_invalid_values(setup_notes, timeout):
     config, *_ = setup_notes
-    with pytest.raises(ValueError):
-        PipelineConfig(**(config.model_dump() | {"provider_timeout_seconds": timeout}))
+    config.generation.selected.overrides["timeout_seconds"] = timeout
+    with pytest.raises(RuntimeError, match="invalid_config"):
+        pipeline.provider_for_config(config).plan()
 
 
 def test_removed_description_is_rejected_by_both_output_contracts():

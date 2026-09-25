@@ -92,6 +92,9 @@ class FakeProvider:
             prompt=prompt,
         )
 
+    def plan(self, request=None):
+        return {"will_call_provider": False}
+
     def generate(self, request):
         assert "最初の論点" in request.transcript
         return ProviderResult(
@@ -218,7 +221,7 @@ def test_failure_report_keeps_console_error_concise_and_writes_diagnostic_log(
     )
 
     payload = json.loads(report.read_text(encoding="utf-8"))
-    assert payload["schema_version"] == "1.1"
+    assert payload["schema_version"] == "1.2"
     assert payload["error"] == "invalid_json_schema: additionalProperties must be false"
     diagnostic_log = Path(payload["diagnostic_log"])
     assert diagnostic_log.read_text(encoding="utf-8") == (

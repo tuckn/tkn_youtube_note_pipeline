@@ -52,8 +52,13 @@ def _common(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--source-root", type=Path)
     parser.add_argument("--summary-root", type=Path)
     parser.add_argument("--reports-root", type=Path)
-    parser.add_argument("--model")
-    parser.add_argument("--provider-timeout-seconds", type=float)
+    parser.add_argument("--profile", help="select a name in generation.profiles")
+    parser.add_argument("--bridge-profile", help="override the selected shared Bridge profile")
+    parser.add_argument("--model", help="override the model in the selected Bridge profile")
+    parser.add_argument(
+        "--provider-timeout-seconds", type=float,
+        help="override the Bridge timeout (seconds, greater than 0 and at most 86400)",
+    )
     parser.add_argument("--summary-profile", choices=BUILT_IN_SUMMARY_PROFILES)
     _verbosity(parser)
 
@@ -194,6 +199,8 @@ def _resolved(args: argparse.Namespace) -> Any:
             "source_root",
             "summary_root",
             "reports_root",
+            "bridge_profile",
+            "profile",
             "model",
             "summary_profile",
             "provider_timeout_seconds",
@@ -247,9 +254,10 @@ def main(argv: list[str] | None = None) -> int:
         if getattr(args, "dry_run", False):
             if args.command in ("ingest", "acquire"):
                 if args.command == "ingest":
-                    provider_for_config(config)  # Validate profile resources; do not run preflight.
+                    bridge_plan = provider_for_config(config).plan()
                 stage = run_acquire(args.video_url, config, args.refresh, dry_run=True)
                 if args.command == "ingest":
+                    stage.details["bridge_plan"] = bridge_plan
                     stage.details["downstream"] = [
                         {
                             "stage": "build-source",
@@ -298,6 +306,10 @@ def main(argv: list[str] | None = None) -> int:
             profile = load_summary_profile(config.summary_profile)
             prompt = profile.prompt
             values = public_config(config)
+            generation_resolved = provider_for_config(config).plan() | {
+                "active_profile": config.generation.active_profile,
+                "summary_profile": config.summary_profile,
+            }
             values["summary_profile_details"] = {
                 "name": profile.name,
                 "source": profile.source,
@@ -324,7 +336,11 @@ def main(argv: list[str] | None = None) -> int:
             }
             print(
                 json.dumps(
-                    {"sources": resolved.sources, "values": values},
+                    {
+                        "sources": resolved.sources,
+                        "values": values,
+                        "generationResolved": generation_resolved,
+                    },
                     ensure_ascii=False,
                     indent=2,
                 )
@@ -405,6 +421,7 @@ def main(argv: list[str] | None = None) -> int:
         if (
             isinstance(exc, ProviderExecutionError)
             and config is not None
+            and args.command in ("ingest", "build-summary")
             and not getattr(args, "dry_run", False)
         ):
             report = write_report(
@@ -413,6 +430,7 @@ def main(argv: list[str] | None = None) -> int:
                 [],
                 str(exc),
                 diagnostic_output=exc.diagnostic_output,
+                provider_error=exc.error_details,
             )
             logger.error("%s; report=%s", exc, report)
         else:

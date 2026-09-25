@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import os
+from copy import deepcopy
 from importlib.resources import files
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal, Self
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from youtube_note_pipeline.summary_resources import (
     BUILT_IN_SUMMARY_PROFILES,
@@ -17,21 +18,98 @@ from youtube_note_pipeline.summary_resources import (
 
 APP_DIRECTORY = "youtube_note_pipeline"
 DEFAULT_CONFIG_RESOURCE = "resources/config.example.yaml"
+CONFIG_SCHEMA_VERSION: Literal["1.0.0"] = "1.0.0"
 
 
-class PipelineConfig(BaseModel):
+def _merge(base: dict[str, Any], layer: dict[str, Any]) -> dict[str, Any]:
+    result = deepcopy(base)
+    for key, value in layer.items():
+        if isinstance(value, dict) and isinstance(result.get(key), dict):
+            result[key] = _merge(result[key], value)
+        else:
+            result[key] = deepcopy(value)
+    return result
+
+
+def _normalize_layer(layer: dict[str, Any], base: dict[str, Any]) -> dict[str, Any]:
+    """Translate old flat AI settings before merging, preserving layer priority."""
+    result = deepcopy(layer)
+    legacy_keys = {
+        "summary_profile", "bridge_profile", "model", "provider_timeout_seconds",
+        "provider", "codex_executable",
+    }
+    legacy = {key: result.pop(key) for key in legacy_keys if key in result}
+    if not legacy:
+        return result
+    if "generation" in result:
+        raise ValueError("do not mix generation with legacy top-level AI settings in one config")
+    generation: dict[str, Any] = {}
+    if "summary_profile" in legacy:
+        generation["summary_profile"] = legacy["summary_profile"]
+    connection: dict[str, Any] = {}
+    if "bridge_profile" in legacy:
+        connection["bridge_profile"] = legacy["bridge_profile"]
+    if legacy.get("provider") is not None:
+        connection["legacy_provider"] = legacy["provider"]
+    overrides: dict[str, Any] = {}
+    for old, new in (("model", "model"), ("provider_timeout_seconds", "timeout_seconds")):
+        if old in legacy and legacy[old] is not None:
+            overrides[new] = legacy[old]
+    if legacy.get("codex_executable") is not None:
+        overrides["cli"] = {"executable": legacy["codex_executable"]}
+        connection.setdefault("legacy_provider", "codex")
+    if overrides:
+        connection["overrides"] = overrides
+    if connection:
+        active, previous = _selected_values(base, allow_missing=True)
+        connection.setdefault("bridge_profile", previous.get("bridge_profile", "codex-default"))
+        generation["profiles"] = {active: connection}
+    result["generation"] = generation
+    return result
+
+
+def _selected_values(
+    values: dict[str, Any], *, allow_missing: bool = False,
+) -> tuple[str, dict[str, Any]]:
+    generation = values.get("generation", {})
+    if not isinstance(generation, dict):
+        raise ValueError("generation must be a mapping")
+    active = generation.get("active_profile", "codex")
+    profiles = generation.get("profiles", {})
+    if not isinstance(active, str) or not isinstance(profiles, dict):
+        raise ValueError("generation requires an active_profile name and profiles mapping")
+    if active not in profiles and not allow_missing:
+        raise ValueError("generation.active_profile must name an entry in generation.profiles")
+    selected = profiles.get(active, {})
+    if not isinstance(selected, dict) or not isinstance(selected.get("overrides", {}), dict):
+        raise ValueError("generation profile and overrides must be mappings")
+    return active, selected
+
+
+class GenerationProfile(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    raw_root: Path
-    source_root: Path
-    summary_root: Path
-    reports_root: Path
-    provider: str = "codex"
-    model: str | None = None
+    bridge_profile: str = Field(min_length=1)
+    overrides: dict[str, Any] = Field(default_factory=dict)
+    # Only populated by the legacy reader; keep the old Codex-only restriction.
+    legacy_provider: str | None = None
+
+    @field_validator("bridge_profile")
+    @classmethod
+    def validate_bridge_profile(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("bridge_profile must not be blank")
+        return value
+
+
+class GenerationConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     summary_profile: str = DEFAULT_SUMMARY_PROFILE
-    fallback_languages: list[str] = Field(default_factory=list)
-    codex_executable: str = "codex"
-    provider_timeout_seconds: float = Field(default=600, gt=0, allow_inf_nan=False)
+    active_profile: str = Field(default="codex", min_length=1)
+    profiles: dict[str, GenerationProfile] = Field(
+        default_factory=lambda: {"codex": GenerationProfile(bridge_profile="codex-default")}
+    )
 
     @field_validator("summary_profile")
     @classmethod
@@ -40,6 +118,39 @@ class PipelineConfig(BaseModel):
             allowed = ", ".join(BUILT_IN_SUMMARY_PROFILES)
             raise ValueError(f"summary_profile must be one of: {allowed}")
         return value
+
+    @model_validator(mode="after")
+    def validate_active_profile(self) -> Self:
+        if any(not name.strip() for name in self.profiles):
+            raise ValueError("generation profile names must not be blank")
+        if self.active_profile not in self.profiles:
+            raise ValueError("generation.active_profile must name an entry in generation.profiles")
+        return self
+
+    @property
+    def selected(self) -> GenerationProfile:
+        return self.profiles[self.active_profile]
+
+
+class PipelineConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    schema_version: Literal["1.0.0"] = CONFIG_SCHEMA_VERSION
+    raw_root: Path
+    source_root: Path
+    summary_root: Path
+    reports_root: Path
+    generation: GenerationConfig = Field(default_factory=GenerationConfig)
+    fallback_languages: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_legacy(cls, value: Any) -> Any:
+        return _normalize_layer(value, {}) if isinstance(value, dict) else value
+
+    @property
+    def summary_profile(self) -> str:
+        return self.generation.summary_profile
 
 
 class ResolvedConfig(BaseModel):
@@ -70,12 +181,9 @@ def default_values() -> dict[str, Any]:
         "source_root": data / "source",
         "summary_root": data / "summary",
         "reports_root": user_state_root() / "reports",
-        "provider": "codex",
-        "model": None,
-        "summary_profile": DEFAULT_SUMMARY_PROFILE,
+        "schema_version": CONFIG_SCHEMA_VERSION,
+        "generation": GenerationConfig().model_dump(),
         "fallback_languages": [],
-        "codex_executable": "codex",
-        "provider_timeout_seconds": 600,
     }
 
 
@@ -153,10 +261,35 @@ def resolve_config(
         candidates.append(explicit_config.expanduser().resolve())
     for path in candidates:
         if path.exists():
-            values.update(_load_yaml(path))
+            layer = _load_yaml(path)
+            normalized = _normalize_layer(layer, values)
+            # In the old format null meant inherit Bridge, clearing an earlier override.
+            if "generation" not in layer:
+                for old, new in (
+                    ("model", "model"), ("provider_timeout_seconds", "timeout_seconds"),
+                ):
+                    if old in layer and layer[old] is None:
+                        _, current_profile = _selected_values(values, allow_missing=True)
+                        current_profile.get("overrides", {}).pop(new, None)
+            values = _merge(values, normalized)
             sources.append(str(path))
     effective_overrides = {k: v for k, v in (overrides or {}).items() if v is not None}
     if effective_overrides:
+        generation = values["generation"]
+        if not isinstance(generation, dict) or not isinstance(generation.get("profiles"), dict):
+            raise ValueError("generation and generation.profiles must be mappings")
+        if "profile" in effective_overrides:
+            generation["active_profile"] = effective_overrides.pop("profile")
+        if "summary_profile" in effective_overrides:
+            generation["summary_profile"] = effective_overrides.pop("summary_profile")
+        _, selected = _selected_values(values)
+        if "bridge_profile" in effective_overrides:
+            selected["bridge_profile"] = effective_overrides.pop("bridge_profile")
+        for cli_key, bridge_key in (
+            ("model", "model"), ("provider_timeout_seconds", "timeout_seconds"),
+        ):
+            if cli_key in effective_overrides:
+                selected.setdefault("overrides", {})[bridge_key] = effective_overrides.pop(cli_key)
         values.update(effective_overrides)
         sources.append("CLI options")
     try:
@@ -167,15 +300,4 @@ def resolve_config(
 
 
 def public_config(config: PipelineConfig) -> dict[str, Any]:
-    return {
-        "raw_root": str(config.raw_root),
-        "source_root": str(config.source_root),
-        "summary_root": str(config.summary_root),
-        "reports_root": str(config.reports_root),
-        "provider": config.provider,
-        "model": config.model,
-        "summary_profile": config.summary_profile,
-        "fallback_languages": config.fallback_languages,
-        "codex_executable": config.codex_executable,
-        "provider_timeout_seconds": config.provider_timeout_seconds,
-    }
+    return config.model_dump(mode="json", exclude_none=True)
