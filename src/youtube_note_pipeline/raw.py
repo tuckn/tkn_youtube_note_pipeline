@@ -9,7 +9,6 @@ import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
-from urllib.request import Request, urlopen
 
 from youtube_note_pipeline import __version__
 from youtube_note_pipeline.captions import parse_json3, select_caption
@@ -33,6 +32,8 @@ def _youtube_dl_options() -> dict[str, Any]:
         "quiet": True,
         "no_warnings": True,
         "noplaylist": True,
+        "noprogress": True,
+        "socket_timeout": 60,
     }
 
 
@@ -152,6 +153,19 @@ def _write_capture(
     return target / "manifest.json"
 
 
+def _download_caption(ydl: Any, info: dict[str, Any], track: dict[str, Any]) -> bytes:
+    # Follow yt-dlp's subtitle path so cookies, headers and per-track browser
+    # impersonation stay attached to the same extraction session.
+    subtitle = dict(track)
+    subtitle.setdefault("http_headers", info.get("http_headers"))
+    with tempfile.TemporaryDirectory(prefix="youtube-note-caption-") as temporary:
+        target = Path(temporary) / "captions.json3"
+        success, _ = ydl.dl(str(target), subtitle, subtitle=True)
+        if not success:
+            raise RuntimeError("yt-dlp could not download the selected caption track")
+        return target.read_bytes()
+
+
 def acquire(
     url: str,
     raw_root: Path,
@@ -160,42 +174,54 @@ def acquire(
 ) -> Path:
     video_id, canonical_url = canonical_video_url(url)
     captured_at = datetime.now().astimezone()
+    info: dict[str, Any] = {
+        "id": video_id,
+        "title": video_id,
+        "description": "",
+        "upload_date": captured_at.strftime("%Y%m%d"),
+    }
+    selection: CaptionSelection | None = None
+    stage = "metadata"
     try:
         import yt_dlp  # type: ignore[import-untyped]
 
         with yt_dlp.YoutubeDL(_youtube_dl_options()) as ydl:
             extracted = ydl.extract_info(canonical_url, download=False)
-            info = ydl.sanitize_info(extracted)
-        if str(info.get("id")) != video_id:
-            raise ValueError("yt-dlp returned a different video")
-        selected = select_caption(info, fallback_languages)
-        if selected is None:
-            return _write_capture(
-                raw_root,
-                info,
-                canonical_url,
-                None,
-                None,
-                "No allowed complete caption track was available",
-                captured_at,
-                refresh,
-            )
-        selection, track = selected
-        request = Request(str(track["url"]), headers={"User-Agent": "youtube-note-pipeline"})
-        with urlopen(request, timeout=60) as response:
-            caption_data = response.read()
+            candidate = ydl.sanitize_info(extracted)
+            if str(candidate.get("id")) != video_id:
+                raise ValueError("yt-dlp returned a different video")
+            video_source(candidate, canonical_url)
+            info = candidate
+            stage = "captions"
+            selected = select_caption(info, fallback_languages)
+            if selected is None:
+                return _write_capture(
+                    raw_root,
+                    info,
+                    canonical_url,
+                    None,
+                    None,
+                    "No allowed complete caption track was available",
+                    captured_at,
+                    refresh,
+                )
+            selection, track = selected
+            caption_data = _download_caption(ydl, info, track)
+        stage = "caption validation"
+        parse_json3(caption_data)
+        stage = "raw storage"
         return _write_capture(
             raw_root, info, canonical_url, caption_data, selection, None, captured_at, refresh
         )
     except Exception as exc:
-        minimal = {
-            "id": video_id,
-            "title": video_id,
-            "description": "",
-            "upload_date": captured_at.strftime("%Y%m%d"),
-        }
+        error = f"{stage} acquisition failed: {exc}"
+        if re.search(r"HTTP (?:Error )?429\b", str(exc), re.IGNORECASE):
+            error += (
+                "; YouTube rate-limited this request. Wait before retrying; "
+                "browser playback can still work. --force does not remove this limit."
+            )
         return _write_capture(
-            raw_root, minimal, canonical_url, None, None, str(exc), captured_at, refresh
+            raw_root, info, canonical_url, None, selection, error, captured_at, refresh
         )
 
 

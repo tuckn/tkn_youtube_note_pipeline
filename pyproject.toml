@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "youtube-note-pipeline"
-version = "0.3.2"
+version = "0.3.3"
 description = "A reproducible YouTube raw-to-source-to-summary note pipeline."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -16,7 +16,7 @@ dependencies = [
   "pydantic>=2.10,<3",
   "PyYAML>=6.0,<7",
   "tkn-genai-bridge @ https://github.com/tuckn/tkn_genai_bridge/archive/fe3ca54d3f974117179655a98b2e5fb12b95f5b7.zip",
-  "yt-dlp>=2025.6.30",
+  "yt-dlp[curl-cffi]>=2026.8.19",
 ]
 
 [project.scripts]

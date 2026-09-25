@@ -69,12 +69,13 @@ flowchart LR
 - Python 3.11 以上と [uv](https://docs.astral.sh/uv/)。
 - 要約に使う CLI または API の利用準備。既定は認証済みの Codex CLI。
 
-以下の操作例は Windows PowerShell 向けです。
+以下のコマンドは、ターミナル（コマンドを入力する画面）で実行してください。
+パスは Windows 形式の例です。利用環境に合わせて置き換えてください。
 他の OS での実動作は未検証です。
 
 ### インストールする
 
-```powershell
+```shell
 cd "C:\path\to\tkn_youtube_note_pipeline"
 uv tool install .
 tkn-youtube-note --help
@@ -88,7 +89,7 @@ tkn-youtube-note --help
 
 ### 設定ファイルを作成する
 
-```powershell
+```shell
 tkn-youtube-note config init
 ```
 
@@ -150,7 +151,7 @@ summary_root: 'C:\path\to\vault\YouTube'
 
 編集後に有効な設定を確認します。
 
-```powershell
+```shell
 tkn-youtube-note config show
 ```
 
@@ -166,7 +167,7 @@ JSON の `values` にある `raw_root`、`source_root`、`summary_root`、`repor
 
 `<video-url>` を、対象動画の URL に置き換えてください。
 
-```powershell
+```shell
 tkn-youtube-note ingest "<video-url>" --dry-run
 ```
 
@@ -182,7 +183,7 @@ Bridge の設定と要求形式を確認しますが、外部 CLI の起動・�
 **通常実行では YouTube から字幕と動画情報を取得し、要約が必要な場合は動画タイトル・URL・字幕全文を Bridge で選択した接続先に渡します。**
 生成時には利用するサービスの料金や利用枠を消費する場合があります。
 
-```powershell
+```shell
 tkn-youtube-note ingest "<video-url>"
 ```
 
@@ -209,7 +210,7 @@ tkn-youtube-note ingest "<video-url>"
 
 保存済みのファイルをもう一度検証する場合は、`<summary-note>` を表示された `path` に置き換えます。
 
-```powershell
+```shell
 tkn-youtube-note validate "<summary-note>"
 ```
 
@@ -223,7 +224,7 @@ tkn-youtube-note validate "<summary-note>"
 動画を追加するときも `ingest "<video-url>"` を使います。
 1回だけ英語で要約する場合は、次のように指定します。
 
-```powershell
+```shell
 tkn-youtube-note ingest "<video-url>" --summary-profile default-en
 ```
 
@@ -248,7 +249,7 @@ tkn-youtube-note ingest "<video-url>" --summary-profile default-en
 **強制再生成は確認済みの編集内容も置き換えます。**
 要約だけを作り直す場合は `build-summary` を使い、保存済みの文字起こしを入力にします。
 
-```powershell
+```shell
 tkn-youtube-note build-summary "<source-note>" --force --dry-run
 tkn-youtube-note build-summary "<source-note>" --force
 ```
@@ -258,7 +259,7 @@ tkn-youtube-note build-summary "<source-note>" --force
 
 ### 取得済みの動画とノートを一覧表示する
 
-```powershell
+```shell
 tkn-youtube-note list
 ```
 
@@ -286,10 +287,18 @@ OS による強制終了などでレポートが残っていない場合は、`l
 | 代表的な失敗                                 | 確認と対応                                                                                                                                                                                                       |
 | -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 許可した字幕を取得できない                   | 原語の字幕があるか確認します。別言語を許可する場合は`fallback_languages` を設定して再取得します。                                                                                                              |
+| `HTTP Error 429: Too Many Requests` | YouTube が取得リクエストを制限しています。ブラウザで再生できても字幕取得だけが失敗する場合があります。連続実行を止め、時間を置いて再試行してください。`--force` はノートの上書き指定であり、この制限を解除しません。 |
 | `source collision` / `summary collision` | 既存ノートと入力・形式が一致していません。`validate` と dry-run で確認し、置き換えてよい場合だけ `--force` を使います。                                                                                      |
 | 同じ識別情報を持つノートが複数ある           | 表示された候補を確認し、保存先内の重複を整理します。CLI は自動で1件を選びません。                                                                                                                                |
 | 生成AIの起動・生成に失敗する                 | `generation.active_profile`、選択した `bridge_profile` と共有設定の実行ファイル・認証・モデルを確認します。レポートの `provider_error.code` と `provider_error.generation_record` に失敗情報が入ります。 |
 | 生成がタイムアウトする                       | 共有設定またはアプリ側プロファイルの`overrides.timeout_seconds` を確認します。`submission_unknown` が true の場合は接続先での完了・課金が不明なため、再実行を判断してください。                              |
+
+字幕は `yt-dlp` のダウンローダーで取得し、動画情報と同じセッションの Cookie・HTTP ヘッダーと、字幕トラックに指定されたブラウザ互換の通信設定を使用します。
+必要な `curl-cffi` は本ツールの依存関係として導入されます。ブラウザから Cookie を読み取る処理はありません。
+旧版からの更新は、このリポジトリで `uv tool install . --reinstall` を実行してください。
+単体の `yt-dlp.exe` を更新しても、本ツール内の Python 依存関係は更新されません。
+失敗時のレポートには `metadata` / `captions` などの段階が入り、字幕取得に失敗した場合も取得済みの動画情報と選択した字幕の情報を raw に残します。
+通信方法を更新しても、YouTube 側の制限によって取得できない場合はあります。
 
 ## コマンド一覧
 
@@ -351,7 +360,7 @@ Bridge 経由の実行では、プロンプト・字幕・応答本文を含む�
 manifest と実行レポート全体の `status` は `success` / `failure` です。
 終了コードは、正常終了が `0`、処理・検証の失敗や `require_force` が `1`、コマンドの引数エラーが `2` です。
 移行では `blocked` が残る場合も `1` になります。
-PowerShell では実行直後の `$LASTEXITCODE` で確認できます。
+終了コードの確認方法は、使用するシェルによって異なります。
 
 ## 設定
 
@@ -440,7 +449,7 @@ profiles:
       base_url: http://127.0.0.1:11434
 ```
 
-```powershell
+```shell
 tkn-youtube-note config show --profile local
 tkn-youtube-note build-summary "<source-note>" --profile local --dry-run
 ```
@@ -666,7 +675,7 @@ manifest は形式の版、ファイルのハッシュ、字幕の選択条件�
 `--language` で字幕の言語を明示できます。
 省略時は `captions.<language>.json3` のファイル名、またはメタデータから決めます。
 
-```powershell
+```shell
 tkn-youtube-note import-raw --metadata "<metadata-file>" --captions "<captions-file>" --language ja
 ```
 
@@ -742,7 +751,7 @@ Bridge の記録は再実行時の調査に使えますが、既存要約の再�
 
 更新済みのリポジトリで再インストールし、コマンドを確認します。
 
-```powershell
+```shell
 cd "C:\path\to\tkn_youtube_note_pipeline"
 uv tool install . --reinstall
 tkn-youtube-note --help
@@ -758,7 +767,7 @@ tkn-youtube-note --help
 
 ### 妥当性と現在の生成条件を確認する
 
-```powershell
+```shell
 tkn-youtube-note validate "<summary-note>"
 tkn-youtube-note status "<summary-note>" --summary-profile default-ja
 ```
@@ -777,16 +786,17 @@ tkn-youtube-note status "<summary-note>" --summary-profile default-ja
 要約内の文字起こし参照を修復し、一部の古い形式宣言を、実際の内容に合う版へ変更します。
 **通常実行は書き込むため、先に計画を保存して変更対象を確認してください。**
 
-```powershell
-tkn-youtube-note migrate-notes --dry-run | Set-Content -Encoding utf8 migration-plan.json
+```shell
+tkn-youtube-note migrate-notes --dry-run
 ```
 
-計画は UTF-8 の `migration-plan.json` に保存します。
+表示された計画の JSON 全体をテキストエディターにコピーし、UTF-8 の `migration-plan.json` として現在の作業フォルダに保存します。
+進捗メッセージなど、JSON 以外の表示は含めないでください。
 ファイルを開き、各項目の状態と変更内容を確認します。
 `planned` は変更対象、`blocked` は候補が曖昧・矛盾するなどの理由で適用できない項目です。
 次のコマンドは、確認した計画を適用します。
 
-```powershell
+```shell
 tkn-youtube-note migrate-notes --apply-plan migration-plan.json
 ```
 
@@ -816,7 +826,7 @@ tkn-youtube-note migrate-notes --apply-plan migration-plan.json
 
 ### 開発環境を用意する
 
-```powershell
+```shell
 cd "C:\path\to\tkn_youtube_note_pipeline"
 uv sync --locked
 uv run pytest
@@ -833,7 +843,7 @@ Bridge を更新する場合は URL 内のコミットを変更し、`uv lock` �
 
 ソースの変更をインストール済み CLI にすぐ反映したい場合は、開発用の editable インストールを使います。
 
-```powershell
+```shell
 cd "C:\path\to\tkn_youtube_note_pipeline"
 uv tool install -e . --reinstall
 ```
