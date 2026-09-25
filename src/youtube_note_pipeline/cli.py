@@ -9,6 +9,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from youtube_note_pipeline import __version__
 from youtube_note_pipeline.config import (
     PipelineConfig,
     initialize_user_config,
@@ -105,6 +106,9 @@ def _configure_logging(args: argparse.Namespace) -> None:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="tkn-youtube-note")
+    parser.add_argument(
+        "--version", action="version", version=f"%(prog)s {__version__}"
+    )
     subparsers = parser.add_subparsers(dest="command", required=True)
     ingest_parser = subparsers.add_parser("ingest", help="run raw, source, and summary stages")
     ingest_parser.add_argument("video_url")
