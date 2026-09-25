@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "youtube-note-pipeline"
-version = "0.3.3"
+version = "0.3.4"
 description = "A reproducible YouTube raw-to-source-to-summary note pipeline."
 readme = "README.md"
 requires-python = ">=3.11"

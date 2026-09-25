@@ -1,5 +1,8 @@
 import json
+from copy import deepcopy
 from pathlib import Path
+
+import pytest
 
 from youtube_note_pipeline.captions import (
     MAX_PARAGRAPH_CHARS,
@@ -39,6 +42,97 @@ def test_automatic_original_precedes_fallback() -> None:
     assert selection is not None
     assert selection.language == "ja-orig"
     assert selection.kind == "automatic"
+
+
+@pytest.mark.parametrize("source_kind", ["subtitles", "automatic_captions"])
+@pytest.mark.parametrize("separate_original", [False, True])
+def test_untranslated_caption_precedes_translation(source_kind, separate_original) -> None:
+    translated = {
+        "ext": "json3", "url": "https://example.invalid/captions?lang=en-US&tlang=ja",
+    }
+    original = {"ext": "json3", "url": "https://example.invalid/captions?lang=ja"}
+    tracks = (
+        {"ja": [translated], "ja-orig": [original]}
+        if separate_original else {"ja": [translated, original]}
+    )
+    info = {"language": "ja", source_kind: tracks}
+    before = deepcopy(info)
+    selected = select_caption(info, [])
+    assert selected is not None
+    selection, track = selected
+    assert track == original
+    assert selection.language == ("ja-orig" if separate_original else "ja")
+    assert selection.source_kind == source_kind
+    assert info == before
+
+
+def test_fallback_language_also_prefers_untranslated_caption() -> None:
+    translated = {"ext": "json3", "url": "https://example.invalid/captions?lang=ja&tlang=en"}
+    original = {"ext": "json3", "url": "https://example.invalid/captions?lang=en-US"}
+    info = {
+        "language": "ja",
+        "automatic_captions": {"en": [translated], "en-US-orig": [original]},
+    }
+    selected = select_caption(info, ["en"])
+    assert selected is not None
+    selection, track = selected
+    assert track == original
+    assert selection.kind == "fallback"
+    assert selection.language == "en-US-orig"
+
+
+@pytest.mark.parametrize("fallback", [False, True])
+def test_translation_remains_available_when_no_original_matches(fallback) -> None:
+    translated = {"ext": "json3", "url": "https://example.invalid/captions?lang=en&tlang=ja"}
+    info = {
+        "language": "en" if fallback else "ja",
+        "automatic_captions": {"ja": [translated]},
+    }
+    selected = select_caption(info, ["ja"] if fallback else [])
+    assert selected is not None
+    selection, track = selected
+    assert track == translated
+    assert selection.kind == ("fallback" if fallback else "automatic")
+
+
+def test_original_preference_does_not_select_an_unrequested_language() -> None:
+    translated = {"ext": "json3", "url": "https://example.invalid/captions?lang=en&tlang=ja"}
+    english = {"ext": "json3", "url": "https://example.invalid/captions?lang=en"}
+    info = {
+        "language": "ja",
+        "automatic_captions": {"en-orig": [english], "ja": [translated]},
+    }
+    selected = select_caption(info, ["en"])
+    assert selected is not None
+    assert selected[1] == translated
+    assert selected[0].language == "ja"
+
+
+def test_caption_selection_skips_unusable_original_formats() -> None:
+    translated = {"ext": "json3", "url": "https://example.invalid/captions?lang=en&tlang=ja"}
+    info = {
+        "language": "ja",
+        "automatic_captions": {
+            "ja": [
+                {"ext": "json3"},
+                {"ext": "vtt", "url": "https://example.invalid/captions?lang=ja"},
+                translated,
+            ],
+        },
+    }
+    selected = select_caption(info, [])
+    assert selected is not None
+    assert selected[1] == translated
+
+
+def test_equal_priority_captions_keep_source_order() -> None:
+    first = {"ext": "json3", "url": "https://example.invalid/captions?lang=ja&track=first"}
+    second = {"ext": "json3", "url": "https://example.invalid/captions?lang=ja&track=second"}
+    selected = select_caption(
+        {"language": "ja", "automatic_captions": {"ja": [first, second]}}, [],
+    )
+    assert selected is not None
+    assert selected[1] == first
 
 
 def test_transcript_full_text_matches_json3() -> None:

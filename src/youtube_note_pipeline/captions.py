@@ -7,6 +7,7 @@ import json
 import re
 from collections.abc import Iterable
 from typing import Any
+from urllib.parse import parse_qs, urlsplit
 
 from youtube_note_pipeline.models import CaptionSelection, TranscriptSegment
 
@@ -37,19 +38,30 @@ def select_caption(
         source_kind: str,
         selection_kind: str,
     ) -> tuple[CaptionSelection, dict[str, Any]] | None:
+        candidates: list[tuple[str, dict[str, Any]]] = []
         for code, formats in tracks.items():
             if not _language_match(str(code), language):
                 continue
-            candidates = list(formats or [])
-            selected = next((item for item in candidates if item.get("ext") == "json3"), None)
-            if selected and selected.get("url"):
-                selection = CaptionSelection(
-                    language=str(code),
-                    kind=selection_kind,  # type: ignore[arg-type]
-                    source_kind=source_kind,  # type: ignore[arg-type]
-                )
-                return selection, dict(selected)
-        return None
+            for track in formats or []:
+                if track.get("ext") == "json3" and track.get("url"):
+                    candidates.append((str(code), track))
+        if not candidates:
+            return None
+        # YouTube can list translated and original tracks under the same language,
+        # or put the original in a later "-orig" entry. Inspect every matching track.
+        # A tlang parameter requests translation; preserve source order for ties.
+        code, selected = min(
+            candidates,
+            key=lambda candidate: "tlang" in parse_qs(
+                urlsplit(str(candidate[1]["url"])).query, keep_blank_values=True,
+            ),
+        )
+        selection = CaptionSelection(
+            language=code,
+            kind=selection_kind,  # type: ignore[arg-type]
+            source_kind=source_kind,  # type: ignore[arg-type]
+        )
+        return selection, dict(selected)
 
     if original:
         result = find(manual, original, "subtitles", "manual")

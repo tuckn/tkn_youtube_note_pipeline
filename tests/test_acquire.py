@@ -85,6 +85,18 @@ def test_acquire_keeps_session_and_caption_download_options(tmp_path, downloader
     assert not downloader.active
 
 
+def test_acquire_downloads_original_instead_of_translated_caption(tmp_path, downloader):
+    original = downloader.info["automatic_captions"]["ja"][0]
+    original["url"] = "https://example.com/captions?lang=ja"
+    translated = {**original, "url": "https://example.com/captions?lang=en-US&tlang=ja"}
+    downloader.info["automatic_captions"]["ja"].insert(0, translated)
+    manifest_path = acquire(URL, tmp_path, [])
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert manifest["status"] == "success"
+    assert len(downloader.calls) == 1
+    assert downloader.calls[0][1]["url"] == original["url"]
+
+
 def test_caption_429_preserves_metadata_without_retries(tmp_path, downloader):
     downloader.download_error = DownloadError("HTTP Error 429: Too Many Requests")
     manifest_path = acquire(URL, tmp_path, [])
