@@ -49,7 +49,7 @@ def build_filename(published: str, title: str, limit: int = 200) -> tuple[str, s
     safe = sanitize_title(title)
     if not safe:
         raise ValueError("title is empty after sanitization")
-    budget = limit - len(f"{prefix}_.md".encode())
+    budget = limit - len(f"{prefix}_.md".encode()) - 1
     shortened = ""
     for character in safe[:80]:
         if len((shortened + character).encode("utf-8")) > budget:

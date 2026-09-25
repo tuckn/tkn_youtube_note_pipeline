@@ -1,0 +1,40 @@
+{
+  "templates": [
+    {
+      "id": "682b27ed-e542-4795-b295-107dbebe82f4",
+      "version": "1.0",
+      "schema_version": "5.0",
+      "hashes": [
+        "68924a5a4c7d039caa445fb3c551374af5724d5920594f6fca31f7a47194e81c",
+        "b9e0d134f374fb0a68cf5fe04f2cbe6f1379dd4dfb18f9438ba41fb497d9f757"
+      ],
+      "headings": [
+        "## 1. Summary",
+        "## 2. Structuring (from abstract to concrete)",
+        "## 3. Key points",
+        "## 4. Technical terms",
+        "## 5. Conclusion"
+      ],
+      "summary_heading": "## 1. Summary",
+      "conclusion_heading": "## 5. Conclusion"
+    }
+  ],
+  "output_schemas": [
+    {
+      "id": "8135b54f-cc2e-484d-8616-f07e1ee376da",
+      "version": "1.1",
+      "hashes": [
+        "8d58e2bacc60b557ab25594f5e8a77f944a712053e419ea9ff433c68fc5a74a9",
+        "9672084b4bb213baa0e840573f105ac8870c1e6ed65f305dbd8df1d09fa325cd"
+      ]
+    },
+    {
+      "id": "8135b54f-cc2e-484d-8616-f07e1ee376da",
+      "version": "1.2",
+      "hashes": [
+        "938a2f3c8cfd70a696337f68cc1be6fa970b7cf7ffa2d25fd260f67220c2f724",
+        "c4cd4af17fd069590d96be63bf11847a79ca40891335d7974af5d0488783b20e"
+      ]
+    }
+  ]
+}

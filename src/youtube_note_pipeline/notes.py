@@ -112,8 +112,10 @@ def render_source(
     segments: list[TranscriptSegment],
     now: datetime,
     note_id: str | None = None,
+    created_at: datetime | None = None,
 ) -> str:
     video = manifest.video
+    created = created_at or now
     author_lines = ["author:"]
     if isinstance(video.author, str):
         author_lines = [f"author: {yaml_quote(video.author)}"]
@@ -133,7 +135,7 @@ def render_source(
         *author_lines,
         f"published: {video.published}",
         "generator: youtube-note-pipeline",
-        f"date: {now.isoformat(timespec='seconds')}",
+        f"date: {created.isoformat(timespec='seconds')}",
         f"updated: {now.isoformat(timespec='seconds')}",
         f"noteId: {note_id or uuid.uuid4()}",
         "---",

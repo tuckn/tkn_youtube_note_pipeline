@@ -103,7 +103,7 @@ def test_config_show_reports_prompt_provenance(
     prompt = profile["prompt"]
     assert prompt["source"].endswith("summary_profiles/default-ja/prompt.md")
     assert prompt["id"] == "70a1a332-fa68-4a6d-9499-d703a17ced3e"
-    assert prompt["version"] == "2.2"
+    assert prompt["version"] == "2.3"
     assert len(prompt["sha256"]) == 64
     assert profile["output_schema"]["id"] == "8135b54f-cc2e-484d-8616-f07e1ee376da"
     assert profile["output_schema"]["source"].endswith(
@@ -146,7 +146,7 @@ def test_config_init_is_idempotent_and_refuses_edited_file(
     assert main(["config", "show", "--quiet"]) == 0
     shown = json.loads(capsys.readouterr().out)
     assert shown["values"]["provider"] == "codex"
-    assert shown["values"]["fallback_languages"] == ["en"]
+    assert shown["values"]["fallback_languages"] == []
 
     assert main(["config", "init", "--quiet"]) == 0
     unchanged = json.loads(capsys.readouterr().out)

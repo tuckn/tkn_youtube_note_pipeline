@@ -1,7 +1,7 @@
 ---
 type: prompt
 id: 26fd2b30-a746-4a4e-85de-94642435d7ab
-version: "1.2"
+version: "1.3"
 ---
 
 # Default English YouTube summary instructions
@@ -48,8 +48,6 @@ claims, reasoning, concrete examples, and conclusion without watching it.
 
 ## Structured fields
 
-- `description`: a concise standalone description of the video's subject and
-  main takeaway.
 - `summary`: one English paragraph of roughly 120–200 words. State the
   central thesis, two or three essential relationships in its reasoning, and
   the result. Leave detailed examples, study names, and secondary qualifications

@@ -20,7 +20,7 @@ def test_packaged_default_summary_profile_is_versioned_and_bundled() -> None:
     assert len(profile.sha256) == 64
     assert profile.prompt.source.endswith("summary_profiles/default-ja/prompt.md")
     assert profile.output_schema.resource_id == "8135b54f-cc2e-484d-8616-f07e1ee376da"
-    assert profile.output_schema.version == "1.1"
+    assert profile.output_schema.version == "1.2"
     assert profile.output_schema.source.endswith("summary_profiles/default-ja/output.schema.json")
     assert set(profile.output_schema.schema["required"]) == set(
         profile.output_schema.schema["properties"]

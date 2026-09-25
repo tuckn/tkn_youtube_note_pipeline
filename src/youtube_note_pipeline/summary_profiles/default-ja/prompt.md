@@ -1,7 +1,7 @@
 ---
 type: prompt
 id: 70a1a332-fa68-4a6d-9499-d703a17ced3e
-version: "2.2"
+version: "2.3"
 ---
 
 # Default YouTube summary instructions
@@ -48,8 +48,6 @@ claims, reasoning, concrete examples, and conclusion without watching it.
 
 ## Structured fields
 
-- `description`: a concise standalone description of the video's subject and
-  main takeaway.
 - `summary`: one Japanese paragraph of roughly 250–400 characters. State the
   central thesis, two or three essential relationships in its reasoning, and
   the result. Leave detailed examples, study names, and secondary qualifications

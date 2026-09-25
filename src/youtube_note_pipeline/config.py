@@ -31,6 +31,7 @@ class PipelineConfig(BaseModel):
     summary_profile: str = DEFAULT_SUMMARY_PROFILE
     fallback_languages: list[str] = Field(default_factory=list)
     codex_executable: str = "codex"
+    provider_timeout_seconds: float = Field(default=600, gt=0, allow_inf_nan=False)
 
     @field_validator("summary_profile")
     @classmethod
@@ -74,6 +75,7 @@ def default_values() -> dict[str, Any]:
         "summary_profile": DEFAULT_SUMMARY_PROFILE,
         "fallback_languages": [],
         "codex_executable": "codex",
+        "provider_timeout_seconds": 600,
     }
 
 
@@ -81,7 +83,7 @@ def global_config_path() -> Path:
     return user_root() / "config.yaml"
 
 
-def initialize_user_config() -> tuple[Path, str]:
+def initialize_user_config(dry_run: bool = False) -> tuple[Path, str]:
     resource = files("youtube_note_pipeline").joinpath(DEFAULT_CONFIG_RESOURCE)
     try:
         payload = resource.read_bytes()
@@ -90,6 +92,12 @@ def initialize_user_config() -> tuple[Path, str]:
             f"built-in configuration template is unavailable: {DEFAULT_CONFIG_RESOURCE}: {exc}"
         ) from exc
     target = global_config_path()
+    if dry_run:
+        if target.exists():
+            if target.read_bytes() == payload:
+                return target, "unchanged"
+            raise FileExistsError(f"refusing to overwrite existing configuration: {target}")
+        return target, "planned"
     target.parent.mkdir(parents=True, exist_ok=True)
     try:
         descriptor = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL)
@@ -100,9 +108,7 @@ def initialize_user_config() -> tuple[Path, str]:
             raise OSError(f"cannot read existing configuration {target}: {read_exc}") from read_exc
         if existing == payload:
             return target, "unchanged"
-        raise FileExistsError(
-            f"refusing to overwrite existing configuration: {target}"
-        ) from exc
+        raise FileExistsError(f"refusing to overwrite existing configuration: {target}") from exc
     try:
         with os.fdopen(descriptor, "wb") as stream:
             stream.write(payload)
@@ -171,4 +177,5 @@ def public_config(config: PipelineConfig) -> dict[str, Any]:
         "summary_profile": config.summary_profile,
         "fallback_languages": config.fallback_languages,
         "codex_executable": config.codex_executable,
+        "provider_timeout_seconds": config.provider_timeout_seconds,
     }

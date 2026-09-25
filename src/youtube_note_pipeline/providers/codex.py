@@ -81,10 +81,14 @@ class CodexProvider:
         executable: str = "codex",
         model: str | None = None,
         summary_profile: str = DEFAULT_SUMMARY_PROFILE,
+        timeout_seconds: float = 600,
     ) -> None:
         self.executable = executable
         self.model = model
         self.profile = load_summary_profile(summary_profile)
+        if not 0 < timeout_seconds < float("inf"):
+            raise ValueError("timeout_seconds must be positive and finite")
+        self.timeout_seconds = timeout_seconds
 
     def preflight(self) -> str:
         logger.debug("Running Codex preflight: %s --version", self.executable)
@@ -140,7 +144,21 @@ class CodexProvider:
                     text=True,
                     encoding="utf-8",
                     check=False,
+                    timeout=self.timeout_seconds,
                 )
+            except subprocess.TimeoutExpired as exc:
+
+                def decoded(value: str | bytes | None) -> str:
+                    return (
+                        value.decode("utf-8", errors="replace")
+                        if isinstance(value, bytes)
+                        else value or ""
+                    )
+
+                raise ProviderExecutionError(
+                    f"Codex summary generation timed out after {self.timeout_seconds:g} seconds",
+                    diagnostic_output=_diagnostic_output(decoded(exc.stderr), decoded(exc.stdout)),
+                ) from exc
             except (OSError, subprocess.SubprocessError) as exc:
                 raise ProviderExecutionError(f"Codex summary generation failed: {exc}") from exc
             if result.returncode != 0:

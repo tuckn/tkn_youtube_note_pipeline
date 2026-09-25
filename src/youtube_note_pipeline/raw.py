@@ -95,6 +95,7 @@ def _write_capture(
     error: str | None,
     captured_at: datetime,
     refresh: bool,
+    dry_run: bool = False,
 ) -> Path:
     source = video_source(info, canonical_url)
     metadata_data = json.dumps(info, ensure_ascii=False, indent=2, sort_keys=True).encode("utf-8")
@@ -131,6 +132,8 @@ def _write_capture(
     while target.exists():
         target = video_root / f"{_capture_name(captured_at)}-{suffix}"
         suffix += 1
+    if dry_run:
+        return target / "manifest.json"
     target.parent.mkdir(parents=True, exist_ok=True)
     temporary = Path(tempfile.mkdtemp(prefix=".capture-", dir=target.parent))
     try:
@@ -200,6 +203,7 @@ def import_raw(
     raw_root: Path,
     language: str | None = None,
     refresh: bool = False,
+    dry_run: bool = False,
 ) -> Path:
     try:
         info = json.loads(metadata_path.read_text(encoding="utf-8"))
@@ -232,4 +236,5 @@ def import_raw(
         None,
         datetime.now().astimezone(),
         refresh,
+        dry_run=dry_run,
     )

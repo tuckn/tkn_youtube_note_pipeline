@@ -93,8 +93,8 @@ reports_root: ~/.tkn/youtube_note_pipeline/state/reports
 provider: codex
 model: null
 summary_profile: default-ja
-fallback_languages:
-  - en
+fallback_languages: []
+provider_timeout_seconds: 600
 codex_executable: codex
 ```
 
@@ -109,7 +109,7 @@ codex_executable: codex
 | `summary_root` | 要約Markdownノート |
 | `reports_root` | 実行結果のJSON report |
 
-既定の`~/.tkn/youtube_note_pipeline/state/`は、`data/`に保存するraw captureやMarkdownノートとは分離して、pipelineの運用状態を置くためのdirectoryです。現行versionでは`reports/`だけを使用し、`ingest`、`acquire`、`import-raw`、`build-source`、`build-summary`の実行ごとに、status、error、各stageの出力pathとdetailsを含むJSON run reportを保存します。providerが失敗した場合は、完全なsubprocess診断を同じdirectoryの`*.provider.log`へ分離して保存します。
+既定の`~/.tkn/youtube_note_pipeline/state/`は、`data/`に保存するraw captureやMarkdownノートとは分離して、pipelineの運用状態を置くためのdirectoryです。通常の`ingest`、`acquire`、`import-raw`、`build-source`、`build-summary`の実行ごとに、status、error、各stageの出力pathとdetailsを含むJSON run reportを`reports/`に保存します。providerが失敗した場合は、完全なsubprocess診断を`*.provider.log`へ分離して保存します。ノート移行の計画・原本backup・結果は`reports/migrations/`へ保存します。dry-runではreportもbackupも作りません。
 
 これらのreportは後続処理の入力には使用されません。削除すると過去の実行履歴と失敗時の詳細診断は失われますが、raw capture、sourceノート、summaryノートには影響せず、次にreportを出力するコマンドを実行したときに`reports/`が再作成されます。`reports_root`を変更した場合は、reportと診断logの保存先もそのdirectoryへ移ります。
 
@@ -157,7 +157,7 @@ YouTube URL
 tkn-youtube-note ingest "https://www.youtube.com/watch?v=VIDEO_ID" --summary-profile default-en
 ```
 
-同じ保存先のsourceノートとsummaryノートを意図的に再生成して置き換える場合は、`--force`を指定します。`--overwrite`も同じ意味です。
+同じ動画のsourceノートとsummaryノートを意図的に再生成して置き換える場合は、`--force`を指定します。既存sourceノートはFrontmatter `url`内のYouTube video IDで識別するため、手動でrename・移動したノートも現在のpathで更新します。`--overwrite`も同じ意味です。
 
 ```console
 tkn-youtube-note ingest "https://www.youtube.com/watch?v=VIDEO_ID" --force
@@ -175,11 +175,35 @@ tkn-youtube-note ingest "https://www.youtube.com/watch?v=VIDEO_ID" --force
 | `tkn-youtube-note build-source <manifest>` | 取得済みraw字幕データを検証し、人が読みやすい文字起こしMarkdown sourceノートへ整形 |
 | `tkn-youtube-note build-summary <source-note>` | 文字起こしMarkdown sourceノートからsummary Markdownノートを作成 |
 | `tkn-youtube-note validate <artifact>` | 生成物を検証 |
+| `tkn-youtube-note status <note>` | 過去の契約に対する妥当性と、選択profileに対する現行性を別々に表示 |
+| `tkn-youtube-note migrate-notes` | backup付きでsource参照と不整合な旧schema宣言を修復 |
 | `tkn-youtube-note config show` | 有効な設定とsummary profileを表示 |
 
 各コマンドのoptionは`tkn-youtube-note <command> --help`で確認できます。
 
 `tkn-youtube-note list`は動画ごとに1件を、最新の取得日時から順に返します。各itemには、最新のmanifest・raw字幕データのpath、成功した取得回数、同じcanonical video URLを持つすべてのsource・summaryノートが含まれます。まだ後続ノートを作成していない取得結果も、空のノート一覧として表示します。読み取れないmanifestやノートは、有効なitemを隠さずtop-levelの`warnings`配列で報告します。
+
+### 事前確認・検証・移行
+
+`ingest`、`acquire`、`import-raw`、`build-source`、`build-summary`、`config init`、`migrate-notes`は`--dry-run`に対応します。ローカル入力を検証してJSONの計画を表示し、applicationのファイル書き込み、AI実行（providerの事前実行確認を含む）、remoteデータの取得は行いません。取得前には字幕の有無・正確なcapture日時・最終ノートを確定できないため、`ingest`は後続stageを`deferred`と明示します。ローカルのbuildでは実行時と同じ上書き・再生成判定を使います。`require_force`の計画は終了コード1を返します。通常のコマンドは既定で書き込みます。
+
+```console
+tkn-youtube-note build-source <manifest> --dry-run
+tkn-youtube-note build-summary <source-note> --dry-run
+tkn-youtube-note status <summary-note> --summary-profile default-ja
+tkn-youtube-note migrate-notes --dry-run > migration-plan.json
+tkn-youtube-note migrate-notes --apply-plan migration-plan.json
+```
+
+`ingest`、`build-source`、`build-summary`では`--force`と`--overwrite`を同義で使用できます。強制再生成はreview済みの編集も置き換えます。`provider_timeout_seconds`は既定600秒で、正の有限値を指定し、`--provider-timeout-seconds`で上書きできます。timeoutは短い失敗メッセージとなり、途中までのprovider診断を通常のerror reportへ保存します。組み込み既定値と設定例はどちらも`fallback_languages: []`です。英語字幕へのfallbackを使う場合は`[en]`を指定します。
+
+stageのstatusは`created`、`updated`、`unchanged`、`failed`、`planned`です。raw captureを再利用した場合も`unchanged`を返します。manifestとrun reportの結果は、既存の版に従い`success` / `failure`を維持します。移行計画では追加で、解決できない項目を`blocked`、対象外を`skipped`と表示します。これらは書き込み成功を表すstatusではありません。
+
+`validate`はノートが宣言した過去の契約で検証します。`status`はさらに、`--summary-profile`に対する`currency.is_current`とprovenanceの差分fieldを表示します。古くても契約上正しいノートは、最新版でなくても`valid: true`です。過去のtemplate・output schemaの検証ルールは`resources/summary_contracts.json`へ保持し、現在の生成profileから独立させます。未知の版や改変されたresourceは推測で通さず検証errorにします。対応するノートの版は1.0、1.1、2.0、3.0、4.0、5.0です。
+
+`migrate-notes`は設定されたsource・summaryのrootだけを検索します。動画URLから一意なsourceを特定し、sourceのnote ID・既存の`sourceNoteId`・ファイルの実在を確認して`source`を修復し、確認済みの`sourceNoteId`を記録します。また、1.0/2.0を宣言しながら既に`type: summary`となっているノートは、1.0 → 1.1（prompt情報を補作せず、旧来のsource側description更新を要求しない形式）、2.0 → 3.0へ移行します。元の1.0/2.0の検証契約は維持します。移行後の契約を事前に検証できた場合だけ計画へ載せます。schema宣言のないノートは参照だけ修復でき、推測したschemaは付けません。
+
+移行で変更するのは計画に記載されたFrontmatter fieldだけです。本文のbyte列、ユーザーfield、review状態、`noteId`、`date`、`updated`、BOM、改行コードを保持します。リンクには設定された論理rootのpathを使用し、物理pathの解決後にroot内であることも確認します。書き込み前に計画を再計算し、sourceとsummaryのhashを照合します。候補が曖昧・矛盾する項目はblockedのままにし、安全なplanned項目を適用できます。変更した各ファイルの原本backupと対応表を`result.json`に残します。途中停止した場合も完了分を記録し、backupから復元できます。結果を受け入れるまでは移行backupを保持してください。修復後に新しく移行を実行すると`unchanged`になります。
 
 ### 進捗ログ
 
@@ -222,7 +246,9 @@ YouTube URL
 
 各raw captureは`<raw-root>/<video-id>/<captured-at>/`に`metadata.info.json`、`captions.<language>.json3`、`manifest.json`として保存します。manifestはschema version、hash、caption track、tool version、canonical URL、成功・失敗を記録します。字幕取得に失敗した場合はsource・summaryノートを作りません。
 
-sourceノートはFrontmatter `schemaVersion: "1.0"`を使用します。新しいsummaryノートは`type: summary`と`schemaVersion: "5.0"`を使用し、prompt・output schema・templateのID、version、SHA-256を記録します。既存summaryのschema 1.0、2.0、3.0、4.0も引き続き検証できます。`nouns`は生成時に登録せず、別のCLIによる付与を許可します。
+sourceノートはFrontmatter `schemaVersion: "1.0"`を使用します。既存sourceノートはファイル名やdirectoryではなく、`source_root`配下を再帰的に検索し、Frontmatter `url`から得たYouTube video IDで識別します。そのためcanonical watch URLと同じvideo IDの`youtu.be` URLは同一identityです。`--overwrite` / `--force`による再生成では、既存の`noteId`と`date`を保持し、`updated`を更新して、発見した現在のpathへ書き戻します。同じ動画のsourceノートが複数ある場合は、暗黙に1件を選ばずerrorにします。
+
+新しいsummaryノートは`type: summary`と`schemaVersion: "5.0"`を使用し、prompt・output schema・templateのID、version、SHA-256を記録します。既存summaryのschema 1.0、2.0、3.0、4.0も引き続き検証できます。`nouns`は生成時に登録せず、別のCLIによる付与を許可します。
 
 summary生成stageのrun reportには、選択したprofile名とSHA-256、prompt ID、document version、application envelope version、prompt source、prompt SHA-256を記録します。providerが失敗した場合、reportの`error`は短い要点に限定し、完全なsubprocess診断は`diagnostic_log`が示す別ファイルへ保存します。provider用の一時ファイルにはplatformのtemp directoryを使用し、artifactは保存先の隣でstagingしてatomicに置き換えます。
 
@@ -253,8 +279,10 @@ Pythonはprofileを一括で読み込み、profile名、各resourceのID・versi
 要約profileのprovenanceは次のように管理します。
 
 - 既存summaryはファイル名ではなくFrontmatterの`url`と`promptId`で検索し、完全UUID名や手動rename後のファイルも同じsummaryとして再利用して重複生成しない
-- 組み込みpromptの同じ`id`で`version`が異なる場合、同じsummaryを自動再生成し、`noteId`と`date`を保持して`updated`を更新し、`reviewStatus: unreviewed`へ戻す
+- 組み込みpromptの同じ`id`で`version`が異なる場合、記録済みのoutput schemaとtemplateのresourceが変わっていなければ同じsummaryを自動再生成し、`noteId`と`date`を保持して`updated`を更新し、`reviewStatus: unreviewed`へ戻す
 - 同じprompt `id`・`version`・SHA-256で、output schemaとtemplateのID・version・SHA-256も一致する場合はidempotentに`unchanged`
 - promptの内容をversion変更なしで更新した場合、またはoutput schemaかtemplateのprovenanceが変わった場合は、既存のreview済み編集を自動置換せず、明示的な`--overwrite` / `--force`を要求
+
+output schema 1.2では、使っていなかったAI出力の`document.description`を削除しました。日本語prompt 2.3・英語prompt 1.3は描画で使うfieldだけを要求します。Markdownの`description`は引き続きConclusionを短縮して使用するため、ノートのschemaは5.0のままで、表示形式も変わりません。既存のoutput schema 1.1のノートも過去の契約で検証できます。今回のprompt・schema同時更新で再生成する場合は`--force`が必要です。生成resourceを追加するときは、過去の検証ルールを上書きせず、不変の契約をregistryへ追記してください。
 
 組み込み指示は、主張の帰属、根拠のない推測と外部知識の禁止、動画全体を抽象から具体へ論点別に再構成すること、主題に不要な広告とCTAの除外、structured summaryの各fieldに含める内容を明示しています。

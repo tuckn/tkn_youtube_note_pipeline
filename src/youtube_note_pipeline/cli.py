@@ -16,7 +16,10 @@ from youtube_note_pipeline.config import (
     resolve_config,
 )
 from youtube_note_pipeline.console_logging import ColorFormatter, log_success, supports_color
+from youtube_note_pipeline.contracts import summary_currency
 from youtube_note_pipeline.inventory import build_inventory
+from youtube_note_pipeline.migration import apply_migration, plan_migration
+from youtube_note_pipeline.notes import split_note
 from youtube_note_pipeline.pipeline import (
     build_source,
     build_summary,
@@ -50,6 +53,7 @@ def _common(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--summary-root", type=Path)
     parser.add_argument("--reports-root", type=Path)
     parser.add_argument("--model")
+    parser.add_argument("--provider-timeout-seconds", type=float)
     parser.add_argument("--summary-profile", choices=BUILT_IN_SUMMARY_PROFILES)
     _verbosity(parser)
 
@@ -123,12 +127,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     source_parser = subparsers.add_parser("build-source", help="build a source note")
     source_parser.add_argument("manifest", type=Path)
-    source_parser.add_argument("--overwrite", action="store_true")
+    source_parser.add_argument("--force", "--overwrite", dest="overwrite", action="store_true")
     _common(source_parser)
 
     summary_parser = subparsers.add_parser("build-summary", help="build a summary note")
     summary_parser.add_argument("source_note", type=Path)
-    summary_parser.add_argument("--overwrite", action="store_true")
+    summary_parser.add_argument("--force", "--overwrite", dest="overwrite", action="store_true")
     _common(summary_parser)
 
     list_parser = subparsers.add_parser(
@@ -141,6 +145,19 @@ def build_parser() -> argparse.ArgumentParser:
     validate_parser.add_argument("path", type=Path)
     _common(validate_parser)
 
+    status_parser = subparsers.add_parser("status", help="check validity and profile currency")
+    status_parser.add_argument("path", type=Path)
+    _common(status_parser)
+
+    migrate_parser = subparsers.add_parser(
+        "migrate-notes",
+        help="repair source references and migrate legacy notes with backups",
+    )
+    migrate_parser.add_argument(
+        "--apply-plan", type=Path, help="apply a previously reviewed dry-run JSON plan"
+    )
+    _common(migrate_parser)
+
     config_parser = subparsers.add_parser("config", help="configuration operations")
     config_subparsers = config_parser.add_subparsers(dest="config_command", required=True)
     show = config_subparsers.add_parser("show", help="show resolved non-secret configuration")
@@ -150,6 +167,21 @@ def build_parser() -> argparse.ArgumentParser:
         help="create the user-global configuration without overwriting edits",
     )
     _verbosity(config_init)
+
+    for mutating in (
+        ingest_parser,
+        acquire_parser,
+        import_parser,
+        source_parser,
+        summary_parser,
+        migrate_parser,
+        config_init,
+    ):
+        mutating.add_argument(
+            "--dry-run",
+            action="store_true",
+            help="validate and preview without writing files, acquiring data, or invoking AI",
+        )
 
     return parser
 
@@ -164,6 +196,7 @@ def _resolved(args: argparse.Namespace) -> Any:
             "reports_root",
             "model",
             "summary_profile",
+            "provider_timeout_seconds",
         )
     }
     return resolve_config(explicit_config=getattr(args, "config", None), overrides=overrides)
@@ -185,7 +218,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.command == "config" and args.config_command == "init":
             logger.info("Initializing user-global configuration")
-            path, status = initialize_user_config()
+            path, status = initialize_user_config(dry_run=args.dry_run)
             print(
                 json.dumps(
                     {"status": status, "path": str(path)},
@@ -197,6 +230,69 @@ def main(argv: list[str] | None = None) -> int:
         resolved = _resolved(args)
         config = resolved.config
         logger.debug("Configuration sources: %s", ", ".join(resolved.sources))
+        if args.command == "migrate-notes":
+            plan = plan_migration(config.source_root, config.summary_root)
+            if args.apply_plan:
+                approved = json.loads(args.apply_plan.read_text(encoding="utf-8-sig"))
+                if not isinstance(approved, dict):
+                    raise ValueError("migration plan must be a JSON object")
+                if any(approved.get(key) != plan[key] for key in ("source_root", "summary_root")):
+                    raise ValueError("migration plan roots do not match resolved configuration")
+                if args.dry_run:
+                    raise ValueError("--apply-plan and --dry-run cannot be combined")
+                plan = approved
+            result = plan if args.dry_run else apply_migration(plan, config.reports_root)
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            return 1 if result["counts"].get("blocked", 0) else 0
+        if getattr(args, "dry_run", False):
+            if args.command in ("ingest", "acquire"):
+                if args.command == "ingest":
+                    provider_for_config(config)  # Validate profile resources; do not run preflight.
+                stage = run_acquire(args.video_url, config, args.refresh, dry_run=True)
+                if args.command == "ingest":
+                    stage.details["downstream"] = [
+                        {
+                            "stage": "build-source",
+                            "action": "deferred",
+                            "reason": "depends on acquired metadata and captions",
+                        },
+                        {
+                            "stage": "build-summary",
+                            "action": "deferred",
+                            "reason": "depends on source and selected profile; AI not run",
+                        },
+                    ]
+            elif args.command == "import-raw":
+                stage = run_import(
+                    args.metadata, args.captions, config, args.language, args.refresh, dry_run=True
+                )
+            elif args.command == "build-source":
+                stage = build_source(
+                    args.manifest, config.source_root, args.overwrite, dry_run=True
+                )
+            elif args.command == "build-summary":
+                stage = build_summary(
+                    args.source_note,
+                    config.summary_root,
+                    provider_for_config(config),
+                    args.overwrite,
+                    dry_run=True,
+                )
+            else:
+                raise ValueError("unsupported dry-run command")
+            print(
+                json.dumps(
+                    {
+                        "dry_run": True,
+                        "status": stage.status,
+                        "path": str(stage.path),
+                        "details": stage.details,
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                )
+            )
+            return 1 if stage.details.get("action") == "require_force" else 0
         if args.command == "config":
             logger.info("Showing resolved configuration")
             profile = load_summary_profile(config.summary_profile)
@@ -249,10 +345,10 @@ def main(argv: list[str] | None = None) -> int:
                 config,
                 "acquire",
                 [stage],
-                None if stage.status != "failure" else str(stage.details.get("error")),
+                None if stage.status != "failed" else str(stage.details.get("error")),
             )
             _print_result(stage.path, stage.status, report)
-            return 1 if stage.status == "failure" else 0
+            return 1 if stage.status == "failed" else 0
         if args.command == "import-raw":
             stage = run_import(args.metadata, args.captions, config, args.language, args.refresh)
             report = write_report(config, "import-raw", [stage])
@@ -284,12 +380,18 @@ def main(argv: list[str] | None = None) -> int:
                 )
             )
             return 0
-        if args.command == "validate":
+        if args.command in ("validate", "status"):
             logger.info("Validating artifact: %s", args.path)
             kind, errors = validate_path(args.path, config.source_root)
+            payload: dict[str, Any] = {"kind": kind, "valid": not errors, "errors": errors}
+            if args.command == "status" and kind == "summary":
+                metadata, _ = split_note(args.path.read_text(encoding="utf-8"))
+                payload["currency"] = summary_currency(
+                    metadata, load_summary_profile(config.summary_profile)
+                )
             print(
                 json.dumps(
-                    {"kind": kind, "valid": not errors, "errors": errors},
+                    payload,
                     ensure_ascii=False,
                     indent=2,
                 )
@@ -300,7 +402,11 @@ def main(argv: list[str] | None = None) -> int:
                 log_success(logger, "Validation succeeded for %s (%s)", args.path, kind)
             return 1 if errors else 0
     except (OSError, ValueError, RuntimeError) as exc:
-        if isinstance(exc, ProviderExecutionError) and config is not None:
+        if (
+            isinstance(exc, ProviderExecutionError)
+            and config is not None
+            and not getattr(args, "dry_run", False)
+        ):
             report = write_report(
                 config,
                 args.command,

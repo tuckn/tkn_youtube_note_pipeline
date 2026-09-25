@@ -30,7 +30,6 @@ DEFAULT_TEST_PROMPT_ID = "00000000-0000-4000-8000-000000000010"
 
 def _summary_document(summary: str) -> dict[str, object]:
     return {
-        "description": "動画の論点を短く説明する。",
         "summary": summary,
         "structuring": [
             {
@@ -253,7 +252,21 @@ def test_changed_caption_is_a_source_collision(tmp_path: Path) -> None:
         FIXTURES / "captions.ja.json3",
         raw_root,
     )
-    build_source(manifest, tmp_path / "source")
+    source = build_source(manifest, tmp_path / "source")
+    source_text = source.path.read_text(encoding="utf-8")
+    source.path.write_text(
+        "\n".join(
+            "date: 2001-02-03T04:05:06+00:00"
+            if line.startswith("date: ")
+            else "updated: 2001-02-03T04:05:06+00:00"
+            if line.startswith("updated: ")
+            else line
+            for line in source_text.splitlines()
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    initial_metadata, _ = split_note(source.path.read_text(encoding="utf-8"))
     changed_payload = json.loads((FIXTURES / "captions.ja.json3").read_text(encoding="utf-8"))
     changed_payload["events"][0]["segs"][0]["utf8"] = "変更された論点です。"
     changed_captions = tmp_path / "captions.ja.json3"
@@ -268,9 +281,70 @@ def test_changed_caption_is_a_source_collision(tmp_path: Path) -> None:
         build_source(changed_manifest, tmp_path / "source")
 
     replaced = build_source(changed_manifest, tmp_path / "source", overwrite=True)
+    replaced_metadata, _ = split_note(replaced.path.read_text(encoding="utf-8"))
     assert replaced.status == "updated"
     assert "変更された論点です。" in replaced.path.read_text(encoding="utf-8")
+    assert replaced_metadata["noteId"] == initial_metadata["noteId"]
+    assert replaced_metadata["date"] == initial_metadata["date"]
+    assert replaced_metadata["updated"] > initial_metadata["updated"]
     assert validate_source(replaced.path) == []
+
+
+def test_existing_source_is_found_by_video_id_after_move_and_rename(
+    tmp_path: Path,
+) -> None:
+    manifest = import_raw(
+        FIXTURES / "metadata.info.json",
+        FIXTURES / "captions.ja.json3",
+        tmp_path / "raw",
+    )
+    source_root = tmp_path / "source"
+    generated = build_source(manifest, source_root)
+    legacy_directory = source_root / "legacy-location"
+    legacy_directory.mkdir()
+    renamed_path = legacy_directory / "manually-renamed-source.md"
+    generated.path.rename(renamed_path)
+    renamed_path.write_text(
+        renamed_path.read_text(encoding="utf-8").replace(
+            "https://www.youtube.com/watch?v=TESTVID0001",
+            "https://youtu.be/TESTVID0001",
+        ),
+        encoding="utf-8",
+    )
+
+    existing = build_source(manifest, source_root)
+
+    assert existing.status == "unchanged"
+    assert existing.path == renamed_path
+    assert validate_source(renamed_path) == []
+    assert len(list(source_root.rglob("*.md"))) == 1
+
+    summary = build_summary(renamed_path, tmp_path / "summary", FakeProvider())
+    summary_metadata, summary_body = split_note(
+        summary.path.read_text(encoding="utf-8")
+    )
+    assert summary_metadata["url"] == (
+        "https://www.youtube.com/watch?v=TESTVID0001"
+    )
+    assert "https://www.youtube.com/watch?v=TESTVID0001&t=0s" in summary_body
+
+
+def test_duplicate_source_video_identity_is_rejected(tmp_path: Path) -> None:
+    manifest = import_raw(
+        FIXTURES / "metadata.info.json",
+        FIXTURES / "captions.ja.json3",
+        tmp_path / "raw",
+    )
+    source_root = tmp_path / "source"
+    generated = build_source(manifest, source_root)
+    duplicate = source_root / "duplicate-source.md"
+    duplicate.write_text(generated.path.read_text(encoding="utf-8"), encoding="utf-8")
+
+    with pytest.raises(
+        FileExistsError,
+        match="multiple source notes share the same YouTube video ID",
+    ):
+        build_source(manifest, source_root)
 
 
 def test_transcript_validation_failure_does_not_persist_source(

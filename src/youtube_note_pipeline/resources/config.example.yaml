@@ -6,6 +6,6 @@ reports_root: ~/.tkn/youtube_note_pipeline/state/reports
 provider: codex
 model: null
 summary_profile: default-ja
-fallback_languages:
-  - en
+fallback_languages: []
 codex_executable: codex
+provider_timeout_seconds: 600

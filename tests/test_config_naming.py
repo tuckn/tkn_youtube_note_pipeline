@@ -105,6 +105,29 @@ def test_filename_is_android_safe() -> None:
     assert not any(character in filename for character in '<>:"/\\|?*')
 
 
+@pytest.mark.parametrize(
+    ("published", "title", "limit", "expected"),
+    [
+        ("2026-05-23", "あ" * 62 + "ab続き", 200, "20260523_" + "あ" * 62 + "a.md"),
+        (
+            "2026-05-23T12:00:00+09:00",
+            "あ" * 58 + "ab続き",
+            200,
+            "20260523T120000+0900_" + "あ" * 58 + "a.md",
+        ),
+        ("2026-05-23", "abcdefghijk", 20, "20260523_abcdefg.md"),
+    ],
+)
+def test_filename_truncates_at_exclusive_byte_limit(
+    published: str, title: str, limit: int, expected: str
+) -> None:
+    year, filename = build_filename(published, title, limit)
+
+    assert year == "2026"
+    assert filename == expected
+    assert len(filename.encode("utf-8")) < limit
+
+
 def test_summary_filename_contains_short_prompt_id_and_stays_android_safe() -> None:
     prompt_id = "00000000-0000-4000-8000-000000000010"
     source_filename = "20260523_" + ("長い日本語タイトル" * 20) + ".md"

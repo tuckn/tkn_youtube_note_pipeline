@@ -8,12 +8,10 @@ import uuid
 from pathlib import Path
 
 from youtube_note_pipeline.captions import parse_json3, validate_transcript
+from youtube_note_pipeline.contracts import NOTE_VERSIONS, summary_contract
 from youtube_note_pipeline.io import sha256_file
 from youtube_note_pipeline.models import RawCaptureManifest
-from youtube_note_pipeline.naming import (
-    build_filename,
-    file_uri_to_path,
-)
+from youtube_note_pipeline.naming import file_uri_to_path
 from youtube_note_pipeline.notes import (
     SOURCE_NOTE_SCHEMA_VERSION,
     compact_description,
@@ -21,7 +19,7 @@ from youtube_note_pipeline.notes import (
     summary_section,
     transcript_from_source,
 )
-from youtube_note_pipeline.summary_resources import load_summary_profile
+from youtube_note_pipeline.raw import canonical_video_url
 
 SOURCE_FRONTMATTER_ORDER = [
     "type",
@@ -223,12 +221,6 @@ def validate_source(path: Path, require_transcript: bool = True) -> list[str]:
     except ValueError as exc:
         if require_transcript:
             errors.append(str(exc))
-    try:
-        year, filename = build_filename(str(metadata.get("published") or ""), title)
-        if path.parent.name != year or path.name != filename:
-            errors.append(f"source must be located at {year}/{filename}")
-    except ValueError as exc:
-        errors.append(str(exc))
     return errors
 
 
@@ -236,6 +228,10 @@ def validate_source_against_manifest(source: Path, manifest_path: Path) -> list[
     errors = validate_source(source)
     try:
         manifest = RawCaptureManifest.model_validate_json(manifest_path.read_text(encoding="utf-8"))
+        metadata, _ = split_note(source.read_text(encoding="utf-8"))
+        source_video_id, _ = canonical_video_url(str(metadata.get("url") or ""))
+        if source_video_id != manifest.video.video_id:
+            errors.append("source URL does not match manifest video ID")
         caption = manifest.artifacts["captions"]
         expected = parse_json3((manifest_path.parent / caption.filename).read_bytes())
         transcript = transcript_from_source(source.read_text(encoding="utf-8"))
@@ -245,20 +241,23 @@ def validate_source_against_manifest(source: Path, manifest_path: Path) -> list[
     return errors
 
 
-def validate_summary(path: Path, source_root: Path | None = None) -> list[str]:
+def validate_summary(
+    path: Path,
+    source_root: Path | None = None,
+    *,
+    text: str | None = None,
+) -> list[str]:
     errors: list[str] = []
     try:
-        text = path.read_text(encoding="utf-8")
+        text = path.read_text(encoding="utf-8") if text is None else text
         metadata, body = split_note(text)
     except (OSError, UnicodeError, ValueError) as exc:
         return [str(exc)]
-    try:
-        profile = load_summary_profile()
-    except (RuntimeError, ValueError) as exc:
-        return [f"cannot load summary profile: {exc}"]
-    current_schema_version = profile.template.note_schema_version
+    headings, summary_heading, conclusion_heading, contract_errors = summary_contract(metadata)
+    errors.extend(contract_errors)
+    current_schema_version = "5.0"
     schema_version = str(metadata.get("schemaVersion"))
-    supported_schema_versions = ("1.0", "2.0", "3.0", "4.0", current_schema_version)
+    supported_schema_versions = NOTE_VERSIONS
     if schema_version not in supported_schema_versions:
         allowed = ", ".join(supported_schema_versions)
         errors.append(f"schemaVersion must be one of: {allowed}")
@@ -285,9 +284,9 @@ def validate_summary(path: Path, source_root: Path | None = None) -> list[str]:
     ):
         if not metadata.get(key):
             errors.append(f"{key} must be non-empty")
-    if is_v1:
+    if schema_version in ("1.0", "1.1"):
         if "promptId" in metadata or "promptVersion" in metadata:
-            errors.append("schemaVersion 1.0 must not contain prompt provenance")
+            errors.append(f"schemaVersion {schema_version} must not contain prompt provenance")
     else:
         try:
             normalized_prompt_id = str(uuid.UUID(str(metadata.get("promptId"))))
@@ -295,45 +294,27 @@ def validate_summary(path: Path, source_root: Path | None = None) -> list[str]:
                 errors.append("promptId must use canonical lowercase UUID form")
         except (ValueError, AttributeError):
             errors.append("promptId must be a UUID")
-        if not isinstance(metadata.get("promptVersion"), str) or not str(
-            metadata.get("promptVersion")
-        ).strip():
+        if (
+            not isinstance(metadata.get("promptVersion"), str)
+            or not str(metadata.get("promptVersion")).strip()
+        ):
             errors.append("promptVersion must be a non-empty string")
     if schema_version == current_schema_version:
-        resource_ids = {
-            "outputSchemaId": profile.output_schema.resource_id,
-            "templateId": profile.template.resource_id,
-        }
-        for key, expected in resource_ids.items():
+        for key in ("outputSchemaId", "templateId"):
             try:
                 normalized = str(uuid.UUID(str(metadata.get(key))))
                 if str(metadata.get(key)) != normalized:
                     errors.append(f"{key} must use canonical lowercase UUID form")
-                elif normalized != expected:
-                    errors.append(f"{key} does not match the current summary resource")
             except (ValueError, AttributeError):
                 errors.append(f"{key} must be a UUID")
-        versions = {
-            "outputSchemaVersion": profile.output_schema.version,
-            "templateVersion": profile.template.version,
-        }
-        for key, expected in versions.items():
+        for key in ("outputSchemaVersion", "templateVersion"):
             value = metadata.get(key)
             if not isinstance(value, str) or not value.strip():
                 errors.append(f"{key} must be a non-empty string")
-            elif value != expected:
-                errors.append(f"{key} does not match the current summary resource")
-        hashes = {
-            "promptSha256": None,
-            "outputSchemaSha256": profile.output_schema.sha256,
-            "templateSha256": profile.template.sha256,
-        }
-        for key, expected_hash in hashes.items():
+        for key in ("promptSha256", "outputSchemaSha256", "templateSha256"):
             value = str(metadata.get(key) or "")
             if not re.fullmatch(r"[0-9a-f]{64}", value):
                 errors.append(f"{key} must be a lowercase SHA-256")
-            elif expected_hash is not None and value != expected_hash:
-                errors.append(f"{key} does not match the current summary resource")
     for key in (
         "linkStatus",
         "medium",
@@ -351,6 +332,8 @@ def validate_summary(path: Path, source_root: Path | None = None) -> list[str]:
             errors.append("nouns must default to [] for schemaVersion 1.0 or 2.0")
     if is_v1:
         expected_order = SUMMARY_FRONTMATTER_ORDER_V1
+    elif schema_version == "1.1":
+        expected_order = [key for key in SUMMARY_FRONTMATTER_ORDER_V1 if key != "nouns"]
     elif schema_version == "2.0":
         expected_order = SUMMARY_FRONTMATTER_ORDER_V2
     elif schema_version == current_schema_version:
@@ -365,39 +348,17 @@ def validate_summary(path: Path, source_root: Path | None = None) -> list[str]:
         video_embed = f"![]({metadata.get('url')})"
         title_position = body.find(title_heading)
         embed_position = body.find(video_embed)
-        summary_position = body.find(profile.template.summary_heading)
+        summary_position = body.find(summary_heading)
         if embed_position < 0:
             errors.append("summary body must contain the video embed")
         elif not (title_position < embed_position < summary_position):
             errors.append("summary video embed must appear after the title and before Summary")
-    legacy_headings = [
-        "## 1. Summary",
-        "## 2. Structuring (from abstract to concrete)",
-        "## 3. Key points",
-        "## 4. Technical terms",
-        "## 5. Conclusion",
-    ]
-    headings = (
-        list(profile.template.required_headings)
-        if schema_version == current_schema_version
-        else legacy_headings
-    )
     positions = [body.find(heading) for heading in headings]
     if any(position < 0 for position in positions):
         errors.append("summary headings are incomplete")
     elif positions != sorted(positions):
         errors.append("summary headings are out of order")
     summary_value = ""
-    summary_heading = (
-        profile.template.summary_heading
-        if schema_version == current_schema_version
-        else "## 1. Summary"
-    )
-    conclusion_heading = (
-        profile.template.conclusion_heading
-        if schema_version == current_schema_version
-        else "## 5. Conclusion"
-    )
     summary_index = headings.index(summary_heading)
     next_summary_heading = (
         headings[summary_index + 1] if summary_index + 1 < len(headings) else None
@@ -417,17 +378,24 @@ def validate_summary(path: Path, source_root: Path | None = None) -> list[str]:
         source_path = file_uri_to_path(str(metadata.get("source") or ""))
         if source_root:
             source_path.resolve(strict=True).relative_to(source_root.resolve(strict=True))
-        if source_path.parent.name != path.parent.name:
+        if schema_version in ("1.0", "2.0") and source_path.parent.name != path.parent.name:
             errors.append("source and summary must use the same year folder")
         if is_v1:
             if source_path.name != path.name:
                 errors.append("legacy source and summary must use the same filename")
         source_metadata, _ = split_note(source_path.read_text(encoding="utf-8"))
+        if (
+            canonical_video_url(str(source_metadata.get("url") or ""))[0]
+            != (canonical_video_url(str(metadata.get("url") or ""))[0])
+        ):
+            errors.append("source and summary video IDs must match")
+        if metadata.get("sourceNoteId") is not None and (
+            str(metadata["sourceNoteId"]) != str(source_metadata.get("noteId"))
+        ):
+            errors.append("sourceNoteId does not match the source note")
         if source_metadata.get("summary") is not None:
             errors.append("source note must not contain reverse summary provenance")
-        if is_v1 and source_metadata.get("description") != compact_description(
-            summary_value
-        ):
+        if is_v1 and source_metadata.get("description") != compact_description(summary_value):
             errors.append("source description must match the compacted Summary")
         if source_metadata.get("cover") != metadata.get("cover"):
             errors.append("source and summary cover must match")
