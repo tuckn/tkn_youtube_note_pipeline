@@ -471,7 +471,6 @@ def _provider(config: PipelineConfig) -> SummaryProvider:
         selected.bridge_profile,
         config.summary_profile,
         overrides=selected.overrides,
-        legacy_provider=selected.legacy_provider,
     )
 
 

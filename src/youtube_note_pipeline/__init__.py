@@ -5,6 +5,6 @@ from importlib.metadata import PackageNotFoundError, version
 try:
     __version__ = version("youtube-note-pipeline")
 except PackageNotFoundError:
-    __version__ = "0.3.5"
+    __version__ = "0.3.6"
 
 __all__ = ["__version__"]

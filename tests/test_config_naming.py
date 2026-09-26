@@ -28,15 +28,17 @@ def test_config_precedence(tmp_path: Path, monkeypatch) -> None:
     )
     cwd_config = tmp_path / ".tkn" / "config.yaml"
     cwd_config.parent.mkdir()
-    cwd_config.write_text("provider: local-placeholder\nraw_root: cwd-raw\n")
+    cwd_config.write_text("generation:\n  summary_profile: default-en\nraw_root: cwd-raw\n")
     explicit = tmp_path / "explicit.yaml"
-    explicit.write_text("provider: codex\nsource_root: explicit-source\n")
+    explicit.write_text(
+        "generation:\n  summary_profile: default-ja\nsource_root: explicit-source\n"
+    )
     resolved = resolve_config(
         cwd=tmp_path,
         explicit_config=explicit,
         overrides={"raw_root": tmp_path / "cli-raw"},
     )
-    assert resolved.config.generation.selected.legacy_provider == "codex"
+    assert resolved.config.generation.summary_profile == "default-ja"
     assert resolved.config.raw_root == tmp_path / "cli-raw"
     assert resolved.config.source_root == tmp_path / "explicit-source"
     assert resolved.config.summary_root == configured_root / "data" / "summary"
@@ -77,7 +79,7 @@ def test_summary_profile_can_be_selected_from_config(tmp_path: Path, monkeypatch
         lambda: tmp_path / "missing-global.yaml",
     )
     explicit = tmp_path / "explicit.yaml"
-    explicit.write_text("summary_profile: default-en\n", encoding="utf-8")
+    explicit.write_text("generation:\n  summary_profile: default-en\n", encoding="utf-8")
 
     resolved = resolve_config(cwd=tmp_path, explicit_config=explicit)
 
@@ -91,7 +93,7 @@ def test_unknown_summary_profile_is_rejected(tmp_path: Path, monkeypatch) -> Non
         lambda: tmp_path / "missing-global.yaml",
     )
     explicit = tmp_path / "explicit.yaml"
-    explicit.write_text("summary_profile: custom\n", encoding="utf-8")
+    explicit.write_text("generation:\n  summary_profile: custom\n", encoding="utf-8")
 
     with pytest.raises(ValueError, match="summary_profile must be one of"):
         resolve_config(cwd=tmp_path, explicit_config=explicit)

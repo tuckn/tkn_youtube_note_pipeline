@@ -31,45 +31,8 @@ def _merge(base: dict[str, Any], layer: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
-def _normalize_layer(layer: dict[str, Any], base: dict[str, Any]) -> dict[str, Any]:
-    """Translate old flat AI settings before merging, preserving layer priority."""
-    result = deepcopy(layer)
-    legacy_keys = {
-        "summary_profile", "bridge_profile", "model", "provider_timeout_seconds",
-        "provider", "codex_executable",
-    }
-    legacy = {key: result.pop(key) for key in legacy_keys if key in result}
-    if not legacy:
-        return result
-    if "generation" in result:
-        raise ValueError("do not mix generation with legacy top-level AI settings in one config")
-    generation: dict[str, Any] = {}
-    if "summary_profile" in legacy:
-        generation["summary_profile"] = legacy["summary_profile"]
-    connection: dict[str, Any] = {}
-    if "bridge_profile" in legacy:
-        connection["bridge_profile"] = legacy["bridge_profile"]
-    if legacy.get("provider") is not None:
-        connection["legacy_provider"] = legacy["provider"]
-    overrides: dict[str, Any] = {}
-    for old, new in (("model", "model"), ("provider_timeout_seconds", "timeout_seconds")):
-        if old in legacy and legacy[old] is not None:
-            overrides[new] = legacy[old]
-    if legacy.get("codex_executable") is not None:
-        overrides["cli"] = {"executable": legacy["codex_executable"]}
-        connection.setdefault("legacy_provider", "codex")
-    if overrides:
-        connection["overrides"] = overrides
-    if connection:
-        active, previous = _selected_values(base, allow_missing=True)
-        connection.setdefault("bridge_profile", previous.get("bridge_profile", "codex-default"))
-        generation["profiles"] = {active: connection}
-    result["generation"] = generation
-    return result
-
-
 def _selected_values(
-    values: dict[str, Any], *, allow_missing: bool = False,
+    values: dict[str, Any],
 ) -> tuple[str, dict[str, Any]]:
     generation = values.get("generation", {})
     if not isinstance(generation, dict):
@@ -78,7 +41,7 @@ def _selected_values(
     profiles = generation.get("profiles", {})
     if not isinstance(active, str) or not isinstance(profiles, dict):
         raise ValueError("generation requires an active_profile name and profiles mapping")
-    if active not in profiles and not allow_missing:
+    if active not in profiles:
         raise ValueError("generation.active_profile must name an entry in generation.profiles")
     selected = profiles.get(active, {})
     if not isinstance(selected, dict) or not isinstance(selected.get("overrides", {}), dict):
@@ -91,8 +54,6 @@ class GenerationProfile(BaseModel):
 
     bridge_profile: str = Field(min_length=1)
     overrides: dict[str, Any] = Field(default_factory=dict)
-    # Only populated by the legacy reader; keep the old Codex-only restriction.
-    legacy_provider: str | None = None
 
     @field_validator("bridge_profile")
     @classmethod
@@ -142,11 +103,6 @@ class PipelineConfig(BaseModel):
     reports_root: Path
     generation: GenerationConfig = Field(default_factory=GenerationConfig)
     fallback_languages: list[str] = Field(default_factory=list)
-
-    @model_validator(mode="before")
-    @classmethod
-    def normalize_legacy(cls, value: Any) -> Any:
-        return _normalize_layer(value, {}) if isinstance(value, dict) else value
 
     @property
     def summary_profile(self) -> str:
@@ -261,17 +217,7 @@ def resolve_config(
         candidates.append(explicit_config.expanduser().resolve())
     for path in candidates:
         if path.exists():
-            layer = _load_yaml(path)
-            normalized = _normalize_layer(layer, values)
-            # In the old format null meant inherit Bridge, clearing an earlier override.
-            if "generation" not in layer:
-                for old, new in (
-                    ("model", "model"), ("provider_timeout_seconds", "timeout_seconds"),
-                ):
-                    if old in layer and layer[old] is None:
-                        _, current_profile = _selected_values(values, allow_missing=True)
-                        current_profile.get("overrides", {}).pop(new, None)
-            values = _merge(values, normalized)
+            values = _merge(values, _load_yaml(path))
             sources.append(str(path))
     effective_overrides = {k: v for k, v in (overrides or {}).items() if v is not None}
     if effective_overrides:

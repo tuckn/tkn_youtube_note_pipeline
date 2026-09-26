@@ -7,7 +7,6 @@ import yaml
 
 from youtube_note_pipeline.cli import main
 from youtube_note_pipeline.config import PipelineConfig, public_config, resolve_config
-from youtube_note_pipeline.pipeline import provider_for_config
 
 
 @pytest.fixture
@@ -45,40 +44,6 @@ def test_nested_layers_and_cli_overrides_preserve_other_profiles(isolated):
     assert config.generation.profiles["codex"].overrides == {
         "reasoning_effort": "high", "timeout_seconds": 1200,
     }
-
-
-def test_legacy_settings_are_normalized_before_new_layer_overrides(isolated):
-    root, user = isolated
-    write(user, {
-        "provider": "codex", "codex_executable": "fixture-codex",
-        "model": "old-model", "provider_timeout_seconds": 600,
-        "summary_profile": "default-en",
-    })
-    write(root / ".tkn/config.yaml", {"generation": {"profiles": {
-        "codex": {"overrides": {"model": "new-model"}},
-    }}})
-    config = resolve_config().config
-    assert config.generation.selected.legacy_provider == "codex"
-    assert config.generation.selected.overrides == {
-        "model": "new-model", "timeout_seconds": 600, "cli": {"executable": "fixture-codex"},
-    }
-    plan = provider_for_config(config).plan()
-    assert plan["model"] == "new-model"
-    assert plan["timeout_seconds"] == 600
-    assert config.summary_profile == "default-en"
-    assert "model" not in public_config(config)
-
-
-def test_legacy_null_clears_prior_override_to_inherit_shared_setting(isolated):
-    root, user = isolated
-    write(root / "bridge.yaml", {"schema_version": "1.1.0", "profiles": {
-        "codex-default": {"provider": "codex", "model": "shared", "timeout_seconds": 90},
-    }})
-    write(user, {"model": "old", "provider_timeout_seconds": 600})
-    write(root / ".tkn/config.yaml", {"model": None, "provider_timeout_seconds": None})
-    plan = provider_for_config(resolve_config().config).plan()
-    assert plan["model"] == "shared"
-    assert plan["timeout_seconds"] == 90
 
 
 def test_config_show_resolves_selected_bridge_and_never_runs_ai(isolated, monkeypatch, capsys):
@@ -125,10 +90,25 @@ def test_invalid_configuration_show_fails_without_writes(isolated, capsys, gener
     assert before == {p: p.read_bytes() for p in root.rglob("*") if p.is_file()}
 
 
-def test_mixed_old_and_new_ai_settings_are_rejected(isolated):
+@pytest.mark.parametrize("key", [
+    "summary_profile", "bridge_profile", "model", "provider_timeout_seconds",
+    "provider", "codex_executable",
+])
+@pytest.mark.parametrize("with_generation", [False, True])
+def test_top_level_ai_settings_are_rejected(isolated, key, with_generation):
     _, user = isolated
-    write(user, {"model": "old", "generation": {"active_profile": "codex"}})
-    with pytest.raises(ValueError, match="do not mix"):
+    data = {key: None}
+    if with_generation:
+        data["generation"] = {"active_profile": "codex"}
+    write(user, data)
+    with pytest.raises(ValueError, match="Extra inputs are not permitted"):
+        resolve_config()
+
+
+def test_removed_profile_compatibility_field_is_rejected(isolated):
+    _, user = isolated
+    write(user, {"generation": {"profiles": {"codex": {"legacy_provider": "codex"}}}})
+    with pytest.raises(ValueError, match="Extra inputs are not permitted"):
         resolve_config()
 
 

@@ -307,7 +307,6 @@ tkn-youtube-note build-summary "<source-note>" --force             # 生成AIを
 | 確認     | `list`                                               | 取得済みの動画と対応ノートを一覧表示                                                   |
 |          | `validate "<file>"`                                  | manifest またはノートの形式を検証                                                      |
 |          | `status "<note>"`                                    | 形式の検証に加え、現在の要約プロファイルとの差分を表示                                 |
-| 保守     | `reorder-notes`                                      | 既存要約の節の並びを最新の順序に変更（再生成しない）                                   |
 |          | `migrate-notes`                                      | 古いノートの参照と形式宣言を修復                                                       |
 | 設定     | `config init`                                        | 設定ファイルを作成（編集済みなら上書きしない）                                         |
 |          | `config show`                                        | 最終的に有効な設定と、その設定元を表示                                                 |
@@ -330,7 +329,7 @@ tkn-youtube-note build-summary "<source-note>" --force             # 生成AIを
 
 ### dry-run の範囲
 
-`ingest`・`acquire`・`import-raw`・`build-source`・`build-summary`・`config init`・`migrate-notes`・`reorder-notes` が `--dry-run` に対応します。
+`ingest`・`acquire`・`import-raw`・`build-source`・`build-summary`・`config init`・`migrate-notes` が `--dry-run` に対応します。
 いずれも設定とローカルファイルの読み取りだけを行い、ファイル・レポート・バックアップの作成、外部への通信、生成AIの呼び出しはしません。
 
 - `build-summary --dry-run` で生成が必要な場合は、入力・スキーマ・接続設定を検証し、入力ハッシュや token 数の概算を `details.bridge_plan` に表示します。
@@ -698,21 +697,6 @@ tkn-youtube-note status "<summary-note>" --summary-profile default-ja
 
 古い版のノートでも、その版の規則に従っていれば `valid: true` です。`currency.is_current: false` は「現在のプロファイルとは異なる」という情報であり、エラー扱いにはなりません。
 
-### 要約の節の並びだけを変更する
-
-古い要約ノートの5節を、生成AIを使わずに現在の並び（結論を前方に置く順序）へ変更します。
-
-```shell
-tkn-youtube-note reorder-notes --dry-run   # 計画を確認
-tkn-youtube-note reorder-notes             # 実行
-```
-
-- 変更するのは節の位置と見出し番号だけです。本文・リンク・末尾の追記・Frontmatter 全体（`reviewStatus`、`noteId` などを含む）・改行形式はそのまま保持します。
-- 実行前に全対象の原本を `reports_root/section-order/<run>/backups/` にバックアップし、`plan.json` と `result.json` に変更内容を記録します。**`reports_root` は Vault の外に置いてください。**
-- すでに新しい順序のノートは `unchanged`、5節がそろっていないノートは `skipped` になります。見出しの重複などで判断できないノートが1件でもあると（`blocked`）、何も書き込みません。
-- 並べ替えたノートは元の生成情報を保持するため、`status` ではテンプレートの差分が表示されますが、検証は通ります。
-- 見出し番号を含むリンク（`#2-conclusion` など）は自動更新されません。
-
 ### 古いノートの参照と形式宣言を修復する
 
 `migrate-notes` は `source_root` と `summary_root` の中を検索し、要約から文字起こしへの参照（`source`）の修復と、一部の古い形式宣言の更新を行います。
@@ -746,23 +730,6 @@ tkn-youtube-note reorder-notes             # 実行
 - 適用時には計画を再計算してファイルのハッシュを照合します。計画後にノートを編集した場合は、計画を作り直してください。
 - `blocked` が残っていても `planned` の項目は適用されますが、終了コードは `1` になります。
 - 原本のバックアップと対象の対応は `reports_root/migrations/` の `result.json` に記録されます。結果を確認し終えるまでバックアップは残してください。修復後にもう一度計画を作り、`unchanged` になっていることを確認すると確実です。
-
-### 旧形式の設定ファイルから移行する
-
-`generation` セクションを使わない旧形式（生成関連の項目を最上位に書く形式）の設定も読み込めますが、新しく書く場合は `generation` にまとめてください。同じファイルで両方の書き方を混ぜるとエラーになります。
-
-| 旧形式の項目               | 移行先                                                                               |
-| -------------------------- | ------------------------------------------------------------------------------------ |
-| `summary_profile`          | `generation.summary_profile`                                                         |
-| `bridge_profile`           | `generation.profiles.<name>.bridge_profile`                                          |
-| `model`                    | Bridge プロファイルの `model`（この CLI 専用なら `overrides.model`）                 |
-| `provider_timeout_seconds` | Bridge プロファイルの `timeout_seconds`（この CLI 専用なら `overrides.timeout_seconds`） |
-| `codex_executable`         | Bridge プロファイルの `cli.executable`                                               |
-| `provider: codex`          | Bridge プロファイルの `provider: codex`                                              |
-
-- 旧形式の `model: null`・`provider_timeout_seconds: null` は Bridge の値を引き継ぎます。
-- 旧形式で `provider`・`codex_executable` が残っている設定は、Codex 専用として扱われます。
-- 移行後は `config show` と `build-summary "<source-note>" --dry-run` で確認してください。
 
 ## 開発
 

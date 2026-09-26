@@ -53,16 +53,12 @@ class BridgeProvider:
         *,
         model: str | None = None,
         timeout_seconds: float | None = None,
-        legacy_provider: str | None = None,
-        codex_executable: str | None = None,
         overrides: dict[str, Any] | None = None,
     ) -> None:
         self.profile = load_summary_profile(summary_profile)
         self.bridge_profile = bridge_profile
         self.model = model
         self.timeout_seconds = timeout_seconds
-        self.legacy_provider = legacy_provider
-        self.codex_executable = codex_executable
         self.overrides = deepcopy(overrides or {})
 
     def _connection(self) -> Profile:
@@ -72,17 +68,7 @@ class BridgeProvider:
             overrides["model"] = self.model
         if self.timeout_seconds is not None:
             overrides["timeout_seconds"] = self.timeout_seconds
-        profile = load_profile(self.bridge_profile, overrides=overrides)
-        if self.legacy_provider is not None or self.codex_executable is not None:
-            if self.legacy_provider not in (None, "codex") or profile.provider != "codex":
-                raise ValueError(
-                    "legacy provider/codex_executable settings require a Codex Bridge profile; "
-                    "remove these settings and select the connection with bridge_profile"
-                )
-            if self.codex_executable is not None:
-                overrides["cli"] = {"executable": self.codex_executable}
-                profile = load_profile(self.bridge_profile, overrides=overrides)
-        return profile
+        return load_profile(self.bridge_profile, overrides=overrides)
 
     def _request(self, request: SummaryRequest | None) -> GenerationRequest:
         return GenerationRequest(

@@ -124,33 +124,27 @@ def test_missing_response_model_uses_requested_model_without_inventing_usage(bac
     assert result.generation_record["response_model"] is None
 
 
-def test_shared_settings_overrides_legacy_settings_and_project_isolation(
+def test_shared_settings_overrides_and_project_isolation(
     backend, tmp_path, monkeypatch,
 ):
     shared_profile(tmp_path, provider="codex", model="shared-model", timeout_seconds=77.0)
     project = tmp_path / ".tkn" / "config.yaml"
     project.parent.mkdir()
-    project.write_text("summary_profile: default-en\n", encoding="utf-8")
+    project.write_text("generation:\n  summary_profile: default-en\n", encoding="utf-8")
     monkeypatch.chdir(tmp_path)
     provider = BridgeProvider("test")
     assert provider.plan()["timeout_seconds"] == 77
     assert provider.plan()["model"] == "shared-model"
     assert "token_estimate" not in provider.plan()
-    legacy = BridgeProvider(
+    overridden = BridgeProvider(
         "test", model="override-model", timeout_seconds=42,
-        legacy_provider="codex", codex_executable="fixture-codex",
+        overrides={"cli": {"executable": "fixture-codex"}},
     )
-    legacy.generate(request())
+    overridden.generate(request())
     connection = backend.generate.call_args.args[0]
     assert connection.model == "override-model"
     assert connection.timeout_seconds == 42
     assert connection.cli.executable == "fixture-codex"
-
-
-def test_legacy_codex_setting_cannot_override_non_codex_profile(tmp_path):
-    shared_profile(tmp_path, provider="ollama", model="fixture-model", local_only=True)
-    with pytest.raises(ValueError, match="require a Codex Bridge profile"):
-        BridgeProvider("test", legacy_provider="codex").plan(request())
 
 
 def test_plan_is_offline_and_validates_missing_profiles(backend, monkeypatch):
