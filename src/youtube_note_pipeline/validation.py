@@ -20,6 +20,7 @@ from youtube_note_pipeline.notes import (
     transcript_from_source,
 )
 from youtube_note_pipeline.raw import canonical_video_url
+from youtube_note_pipeline.sections import section_headings
 
 SOURCE_FRONTMATTER_ORDER = [
     "type",
@@ -253,7 +254,9 @@ def validate_summary(
         metadata, body = split_note(text)
     except (OSError, UnicodeError, ValueError) as exc:
         return [str(exc)]
-    headings, summary_heading, conclusion_heading, contract_errors = summary_contract(metadata)
+    headings, summary_heading, conclusion_heading, contract_errors = summary_contract(
+        metadata, body
+    )
     errors.extend(contract_errors)
     current_schema_version = "5.0"
     schema_version = str(metadata.get("schemaVersion"))
@@ -353,10 +356,14 @@ def validate_summary(
             errors.append("summary body must contain the video embed")
         elif not (title_position < embed_position < summary_position):
             errors.append("summary video embed must appear after the title and before Summary")
-    positions = [body.find(heading) for heading in headings]
-    if any(position < 0 for position in positions):
+    actual_headings = [heading for _, _, heading in section_headings(body)]
+    if any(heading not in actual_headings for heading in headings):
         errors.append("summary headings are incomplete")
-    elif positions != sorted(positions):
+    elif any(actual_headings.count(heading) != 1 for heading in headings):
+        errors.append("summary headings are duplicated")
+    elif [actual_headings.index(heading) for heading in headings] != sorted(
+        actual_headings.index(heading) for heading in headings
+    ):
         errors.append("summary headings are out of order")
     summary_value = ""
     summary_index = headings.index(summary_heading)

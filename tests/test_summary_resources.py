@@ -26,7 +26,7 @@ def test_packaged_default_summary_profile_is_versioned_and_bundled() -> None:
         profile.output_schema.schema["properties"]
     )
     assert profile.template.resource_id == "682b27ed-e542-4795-b295-107dbebe82f4"
-    assert profile.template.version == "1.0"
+    assert profile.template.version == "1.1"
     assert profile.template.note_schema_version == "5.0"
     assert profile.template.source.endswith("summary_profiles/default-ja/template.md")
     assert all(heading in profile.template.body for heading in profile.template.required_headings)

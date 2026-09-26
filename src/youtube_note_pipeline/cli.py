@@ -31,6 +31,7 @@ from youtube_note_pipeline.pipeline import (
     write_report,
 )
 from youtube_note_pipeline.providers import ProviderExecutionError
+from youtube_note_pipeline.section_order import apply_section_order, plan_section_order
 from youtube_note_pipeline.summary_resources import (
     BUILT_IN_SUMMARY_PROFILES,
     load_summary_profile,
@@ -167,6 +168,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _common(migrate_parser)
 
+    reorder_parser = subparsers.add_parser(
+        "reorder-notes",
+        help="move Conclusion before Key points without regenerating content; back up originals",
+    )
+    _common(reorder_parser)
+
     config_parser = subparsers.add_parser("config", help="configuration operations")
     config_subparsers = config_parser.add_subparsers(dest="config_command", required=True)
     show = config_subparsers.add_parser("show", help="show resolved non-secret configuration")
@@ -184,6 +191,7 @@ def build_parser() -> argparse.ArgumentParser:
         source_parser,
         summary_parser,
         migrate_parser,
+        reorder_parser,
         config_init,
     ):
         mutating.add_argument(
@@ -241,6 +249,11 @@ def main(argv: list[str] | None = None) -> int:
         resolved = _resolved(args)
         config = resolved.config
         logger.debug("Configuration sources: %s", ", ".join(resolved.sources))
+        if args.command == "reorder-notes":
+            plan = plan_section_order(config.summary_root)
+            result = plan if args.dry_run else apply_section_order(plan, config.reports_root)
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            return 1 if result["counts"].get("blocked", 0) else 0
         if args.command == "migrate-notes":
             plan = plan_migration(config.source_root, config.summary_root)
             if args.apply_plan:

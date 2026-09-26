@@ -1,16 +1,16 @@
 ---
 type: summary-template
 id: 682b27ed-e542-4795-b295-107dbebe82f4
-version: "1.0"
+version: "1.1"
 noteSchemaVersion: "5.0"
 requiredHeadings:
   - "## 1. Summary"
-  - "## 2. Structuring (from abstract to concrete)"
+  - "## 2. Conclusion"
   - "## 3. Key points"
-  - "## 4. Technical terms"
-  - "## 5. Conclusion"
+  - "## 4. Structuring (from abstract to concrete)"
+  - "## 5. Technical terms"
 summaryHeading: "## 1. Summary"
-conclusionHeading: "## 5. Conclusion"
+conclusionHeading: "## 2. Conclusion"
 ---
 
 ---
@@ -46,7 +46,21 @@ noteId: {{ note_id }}
 
 {{ document.summary }}
 
-## 2. Structuring (from abstract to concrete)
+## 2. Conclusion
+
+{{ document.conclusion }}
+
+## 3. Key points
+
+{% for point in document.key_points %}
+{% if point.timestamp_seconds is none %}
+- {{ point.text }}
+{% else %}
+- [{{ point.timestamp_seconds | timestamp }}]({{ video.canonical_url }}&t={{ point.timestamp_seconds }}s) {{ point.text }}
+{% endif %}
+{% endfor %}
+
+## 4. Structuring (from abstract to concrete)
 
 {% for section in document.structuring %}
 ### {{ section.heading }}
@@ -62,21 +76,9 @@ noteId: {{ note_id }}
 {% endfor %}
 {% endfor %}
 {% endfor %}
-## 3. Key points
 
-{% for point in document.key_points %}
-{% if point.timestamp_seconds is none %}
-- {{ point.text }}
-{% else %}
-- [{{ point.timestamp_seconds | timestamp }}]({{ video.canonical_url }}&t={{ point.timestamp_seconds }}s) {{ point.text }}
-{% endif %}
-{% endfor %}
-## 4. Technical terms
+## 5. Technical terms
 
 {% for term in document.technical_terms %}
 - {{ term }}
 {% endfor %}
-## 5. Conclusion
-
-{{ document.conclusion }}
-

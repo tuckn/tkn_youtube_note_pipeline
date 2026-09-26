@@ -12,22 +12,20 @@ import json
 from importlib.resources import files
 from typing import Any
 
+from youtube_note_pipeline.sections import LEGACY_HEADINGS, historical_layout
 from youtube_note_pipeline.summary_resources import SummaryProfile
 
-LEGACY_HEADINGS = (
-    "## 1. Summary",
-    "## 2. Structuring (from abstract to concrete)",
-    "## 3. Key points",
-    "## 4. Technical terms",
-    "## 5. Conclusion",
-)
 NOTE_VERSIONS = ("1.0", "1.1", "2.0", "3.0", "4.0", "5.0")
 
 
-def summary_contract(metadata: dict[str, Any]) -> tuple[list[str], str, str, list[str]]:
+def summary_contract(
+    metadata: dict[str, Any], body: str | None = None,
+) -> tuple[list[str], str, str, list[str]]:
     """Resolve recorded template and output schema to maintained validation rules."""
     if str(metadata.get("schemaVersion")) != "5.0":
-        return list(LEGACY_HEADINGS), LEGACY_HEADINGS[0], LEGACY_HEADINGS[-1], []
+        headings = historical_layout(list(LEGACY_HEADINGS), body)
+        conclusion = next(heading for heading in headings if heading.endswith(". Conclusion"))
+        return headings, headings[0], conclusion, []
     registry = json.loads(
         files("youtube_note_pipeline")
         .joinpath("resources/summary_contracts.json")
@@ -51,7 +49,9 @@ def summary_contract(metadata: dict[str, Any]) -> tuple[list[str], str, str, lis
                 errors.append("template contract does not match schemaVersion")
     if template is None:
         return list(LEGACY_HEADINGS), LEGACY_HEADINGS[0], LEGACY_HEADINGS[-1], errors
-    return template["headings"], template["summary_heading"], template["conclusion_heading"], errors
+    headings = historical_layout(template["headings"], body)
+    conclusion = next(heading for heading in headings if heading.endswith(". Conclusion"))
+    return headings, template["summary_heading"], conclusion, errors
 
 
 def summary_currency(metadata: dict[str, Any], profile: SummaryProfile) -> dict[str, Any]:

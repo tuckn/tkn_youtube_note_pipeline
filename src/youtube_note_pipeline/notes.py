@@ -14,6 +14,7 @@ import yaml
 from youtube_note_pipeline.captions import render_transcript
 from youtube_note_pipeline.models import RawCaptureManifest, TranscriptSegment, VideoSource
 from youtube_note_pipeline.naming import path_to_file_uri
+from youtube_note_pipeline.sections import section_headings
 from youtube_note_pipeline.summary_resources import (
     SummaryProfile,
     render_summary_template,
@@ -66,16 +67,20 @@ def transcript_from_source(text: str) -> str:
 
 
 def summary_section(body: str, heading: str, next_heading: str | None = None) -> str:
-    start_match = re.search(rf"(?m)^{re.escape(heading)}\s*$", body)
-    if not start_match:
+    spans = section_headings(body)
+    matching = [index for index, (_, _, name) in enumerate(spans) if name == heading]
+    if not matching:
         raise ValueError(f"summary note has no {heading} heading")
-    start = start_match.end()
+    index = matching[0]
+    start = spans[index][1]
     end = len(body)
     if next_heading:
-        end_match = re.search(rf"(?m)^{re.escape(next_heading)}\s*$", body[start:])
-        if not end_match:
+        following = [offset for offset, _, name in spans[index + 1:] if name == next_heading]
+        if not following:
             raise ValueError(f"summary note has no {next_heading} heading")
-        end = start + end_match.start()
+        end = following[0]
+    elif index + 1 < len(spans):
+        end = spans[index + 1][0]
     value = body[start:end].strip()
     if not value:
         raise ValueError(f"{heading} section is empty")
