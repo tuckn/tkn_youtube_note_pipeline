@@ -1,4 +1,4 @@
-# Tkn YouTube Note Pipeline
+# tkn-youtube-note: Tkn YouTube Note Pipeline
 
 YouTube 動画の URL を1つ渡すと、字幕を取得して保存し、生成AIで要約した Markdown ノートを作る CLI です。
 
@@ -141,7 +141,7 @@ tkn-youtube-note config init
 
 **Codex CLI を既定のまま使うなら、Bridge の設定ファイルは不要です。** ファイルがない場合、Bridge は組み込みの `codex-default`（Codex CLI・CLI 側の既定モデル）を使います。
 
-別の接続先を使う場合は、まず Bridge の設定ファイルに接続プロファイルを定義します（書き方は [Bridge の設定仕様](https://github.com/tuckn/tkn_genai_bridge/blob/fe3ca54d3f974117179655a98b2e5fb12b95f5b7/docs/reference/configuration.md) を参照）。
+別の接続先を使う場合は、まず Bridge の設定ファイルに接続プロファイルを定義します（書き方は [Bridge の設定仕様](https://github.com/tuckn/tkn_genai_bridge/blob/9cf534e47159901c3bb05bb802695fad746cc338/docs/reference/configuration.md) を参照）。
 
 ```yaml
 # ~/.tkn/genai_bridge/config.yaml（一部）

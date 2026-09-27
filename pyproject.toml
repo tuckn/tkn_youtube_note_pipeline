@@ -15,7 +15,7 @@ dependencies = [
   "jsonschema>=4.23,<5",
   "pydantic>=2.10,<3",
   "PyYAML>=6.0,<7",
-  "tkn-genai-bridge @ https://github.com/tuckn/tkn_genai_bridge/archive/fe3ca54d3f974117179655a98b2e5fb12b95f5b7.zip",
+  "tkn-genai-bridge @ https://github.com/tuckn/tkn_genai_bridge/archive/9cf534e47159901c3bb05bb802695fad746cc338.zip",
   "yt-dlp[curl-cffi]>=2026.8.19",
 ]
 
