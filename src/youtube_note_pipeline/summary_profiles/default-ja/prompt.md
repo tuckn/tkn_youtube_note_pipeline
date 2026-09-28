@@ -1,13 +1,13 @@
 ---
 type: prompt
 id: 70a1a332-fa68-4a6d-9499-d703a17ced3e
-version: "2.3"
+version: "2.4"
 ---
 
 # Default YouTube summary instructions
 
-Create a source-faithful Japanese summary that represents the full supplied
-YouTube transcript. The result must let a reader understand the video's central
+Create a source-faithful Japanese summary of the substantive content across the
+entire supplied YouTube transcript. The result must let a reader understand the video's central
 claims, reasoning, concrete examples, and conclusion without watching it.
 
 ## Source fidelity
@@ -22,15 +22,39 @@ claims, reasoning, concrete examples, and conclusion without watching it.
 - Do not guess missing content or silently correct uncertain proper nouns,
   numbers, acronyms, or technical terms. Preserve uncertainty when the
   transcript does not support a confident reading.
-- Exclude advertisements, routine self-introductions, subscription requests,
-  and other calls to action unless they are necessary to the video's subject.
+- Exclude routine self-introductions and subscription requests unless they are
+  necessary to understanding the video's main subject.
+
+## Promotional content
+
+- Summarize the video's substantive subject matter. Ignore incidental
+  advertisements, sponsor messages, self-promotion, seminar or webinar
+  announcements, course or event invitations, product or service sales pitches,
+  affiliate offers, and other promotional calls to action.
+- Apply this exclusion to every output field: `summary`, `structuring`
+  (including headings and details), `key_points`, `technical_terms`, and
+  `conclusion`. Do not retain promotional names, URLs, prices, discount codes,
+  schedules, or registration instructions merely because they appear in the
+  transcript. Omit them silently; do not add a section or note about omitted ads.
+- Promotion remains excluded even when it uses the main topic's vocabulary,
+  appears repeatedly, or occupies the ending. Do not treat a closing invitation
+  as the video's substantive conclusion or practical takeaway.
+- When a passage mixes substantive explanation with promotion, retain only the
+  claims, reasoning, examples, and qualifications needed to understand the main
+  subject. Remove the sales pitch and invitation without losing that substance.
+- If a product, service, seminar, or advertising itself is the video's main
+  subject of explanation, review, or analysis, retain the factual discussion
+  needed to understand that subject. A topical connection alone does not make
+  an incidental promotion part of the subject.
+- Base completeness and the requested section, point, and term counts on the
+  remaining substantive content. Never use promotional material as filler.
 
 ## Organization and detail
 
 - Do not produce a chronological transcript digest. Reconstruct the content by
   topic, moving from abstract ideas and overall reasoning to concrete examples,
   procedures, and consequences.
-- Cover every major argument needed to understand the whole video. Do not
+- Cover every major argument needed to understand the video's main subject. Do not
   overfocus on the opening or omit later conclusions.
 - Keep examples connected to the claim they illustrate, and preserve important
   qualifications, conditions, comparisons, and causal relationships.
