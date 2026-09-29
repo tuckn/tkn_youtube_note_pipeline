@@ -35,6 +35,24 @@
       ],
       "summary_heading": "## 1. Summary",
       "conclusion_heading": "## 2. Conclusion"
+    },
+    {
+      "id": "682b27ed-e542-4795-b295-107dbebe82f4",
+      "version": "1.2",
+      "schema_version": "5.0",
+      "hashes": [
+        "60ff8a25f6c975dcfb3b8eee1bcce3194a32d271e4b2953c6e90b1f6fb4c91b9",
+        "c9901b8cdbf92bbbcc055372d9dda33b33ec7ca020d3adb9aa7cb049a9791ce2"
+      ],
+      "headings": [
+        "## 1. 要約",
+        "## 2. 結論",
+        "## 3. 要点",
+        "## 4. 構造（抽象から具体へ）",
+        "## 5. 専門用語"
+      ],
+      "summary_heading": "## 1. 要約",
+      "conclusion_heading": "## 2. 結論"
     }
   ],
   "output_schemas": [

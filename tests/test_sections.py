@@ -1,10 +1,17 @@
 import re
 from pathlib import Path
 
+import pytest
+
 from youtube_note_pipeline.contracts import summary_contract
 from youtube_note_pipeline.migration import patch_metadata
 from youtube_note_pipeline.notes import split_note, summary_section
-from youtube_note_pipeline.sections import CONCLUSION_FIRST_HEADINGS, LEGACY_HEADINGS
+from youtube_note_pipeline.sections import (
+    CONCLUSION_FIRST_HEADINGS,
+    JAPANESE_CONCLUSION_FIRST_HEADINGS,
+    LEGACY_HEADINGS,
+    japanese_heading,
+)
 
 
 def test_legacy_contract_allows_only_the_named_reorder_and_keeps_provenance_checks():
@@ -46,9 +53,9 @@ def test_current_template_renders_conclusion_before_points_and_description_stops
     source = build_source(manifest, tmp_path / "sources").path
     summary = build_summary(source, tmp_path / "summaries", FakeProvider()).path
     metadata, body = split_note(summary.read_text(encoding="utf-8"))
-    assert re.findall(r"^## .+$", body, re.M) == list(CONCLUSION_FIRST_HEADINGS)
+    assert re.findall(r"^## .+$", body, re.M) == list(JAPANESE_CONCLUSION_FIRST_HEADINGS)
     assert validate_summary(summary) == []
-    assert summary_section(body, "## 2. Conclusion") == metadata["description"]
+    assert summary_section(body, "## 2. 結論") == metadata["description"]
     original = summary.read_bytes()
     summary.write_bytes(patch_metadata(original, {"description": "incorrect"}))
     assert "summary description must match the compacted Conclusion" in validate_summary(summary)
@@ -64,3 +71,52 @@ def test_section_extraction_ignores_fenced_headings_and_stops_before_appendix():
         "Takeaway.\n\n```markdown\n## 3. Key points\nExample, not a section.\n```"
     )
     assert summary_section(body, "## 3. Key points") == "- Point."
+
+
+@pytest.mark.parametrize("profile_name", ["default-ja", "default-en"])
+def test_current_template_has_registered_contract(profile_name):
+    from youtube_note_pipeline.summary_resources import load_summary_profile
+
+    profile = load_summary_profile(profile_name)
+    metadata = {
+        "schemaVersion": profile.template.note_schema_version,
+        "templateId": profile.template.resource_id,
+        "templateVersion": profile.template.version,
+        "templateSha256": profile.template.sha256,
+        "outputSchemaId": profile.output_schema.resource_id,
+        "outputSchemaVersion": profile.output_schema.version,
+        "outputSchemaSha256": profile.output_schema.sha256,
+    }
+    headings, summary, conclusion, errors = summary_contract(metadata)
+    assert headings == list(profile.template.required_headings)
+    assert summary == profile.template.summary_heading
+    assert conclusion == profile.template.conclusion_heading
+    assert errors == []
+
+
+@pytest.mark.parametrize("version", ["1.0", "1.1", "2.0", "3.0", "4.0", "5.0"])
+@pytest.mark.parametrize("layout", [LEGACY_HEADINGS, CONCLUSION_FIRST_HEADINGS])
+def test_heading_translation_preserves_historical_contract(version, layout):
+    metadata = {
+        "schemaVersion": version,
+        "templateId": "682b27ed-e542-4795-b295-107dbebe82f4",
+        "templateVersion": "1.0",
+        "templateSha256": "68924a5a4c7d039caa445fb3c551374af5724d5920594f6fca31f7a47194e81c",
+        "outputSchemaId": "8135b54f-cc2e-484d-8616-f07e1ee376da",
+        "outputSchemaVersion": "1.2",
+        "outputSchemaSha256": "938a2f3c8cfd70a696337f68cc1be6fa970b7cf7ffa2d25fd260f67220c2f724",
+    }
+    translated = [japanese_heading(heading) for heading in layout]
+    body = "\n\n".join(heading + "\n\nContent." for heading in translated)
+    headings, summary, conclusion, errors = summary_contract(metadata, body)
+    assert headings == translated
+    assert summary == "## 1. 要約"
+    assert conclusion.endswith(". 結論")
+    assert errors == []
+    mixed = body.replace("## 1. 要約", "## 1. Summary")
+    assert summary_contract(metadata, mixed)[0] != translated
+    if version == "5.0":
+        metadata["templateSha256"] = "0" * 64
+        assert summary_contract(metadata, body)[3] == [
+            "unknown or altered historical template resource"
+        ]

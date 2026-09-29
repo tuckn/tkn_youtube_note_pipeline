@@ -161,7 +161,7 @@ def test_full_synthetic_pipeline_and_idempotency(
     assert (
         "# Synthetic pipeline test video\n\n"
         "![](https://www.youtube.com/watch?v=TESTVID0001)\n\n"
-        "## 1. Summary"
+        "## 1. 要約"
     ) in summary_text
     assert "### 中心となる考え\n\n#### 論点と具体例" in summary_text
     assert (

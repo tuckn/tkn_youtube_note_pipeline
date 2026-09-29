@@ -24,7 +24,9 @@ def summary_contract(
     """Resolve recorded template and output schema to maintained validation rules."""
     if str(metadata.get("schemaVersion")) != "5.0":
         headings = historical_layout(list(LEGACY_HEADINGS), body)
-        conclusion = next(heading for heading in headings if heading.endswith(". Conclusion"))
+        conclusion = next(
+            heading for heading in headings if heading.endswith((". Conclusion", ". 結論"))
+        )
         return headings, headings[0], conclusion, []
     registry = json.loads(
         files("youtube_note_pipeline")
@@ -50,8 +52,10 @@ def summary_contract(
     if template is None:
         return list(LEGACY_HEADINGS), LEGACY_HEADINGS[0], LEGACY_HEADINGS[-1], errors
     headings = historical_layout(template["headings"], body)
-    conclusion = next(heading for heading in headings if heading.endswith(". Conclusion"))
-    return headings, template["summary_heading"], conclusion, errors
+    conclusion = next(
+        heading for heading in headings if heading.endswith((". Conclusion", ". 結論"))
+    )
+    return headings, headings[0], conclusion, errors
 
 
 def summary_currency(metadata: dict[str, Any], profile: SummaryProfile) -> dict[str, Any]:

@@ -1,16 +1,16 @@
 ---
 type: summary-template
 id: 682b27ed-e542-4795-b295-107dbebe82f4
-version: "1.1"
+version: "1.2"
 noteSchemaVersion: "5.0"
 requiredHeadings:
-  - "## 1. Summary"
-  - "## 2. Conclusion"
-  - "## 3. Key points"
-  - "## 4. Structuring (from abstract to concrete)"
-  - "## 5. Technical terms"
-summaryHeading: "## 1. Summary"
-conclusionHeading: "## 2. Conclusion"
+  - "## 1. 要約"
+  - "## 2. 結論"
+  - "## 3. 要点"
+  - "## 4. 構造（抽象から具体へ）"
+  - "## 5. 専門用語"
+summaryHeading: "## 1. 要約"
+conclusionHeading: "## 2. 結論"
 ---
 
 ---
@@ -42,15 +42,15 @@ noteId: {{ note_id }}
 
 ![]({{ video.canonical_url }})
 
-## 1. Summary
+## 1. 要約
 
 {{ document.summary }}
 
-## 2. Conclusion
+## 2. 結論
 
 {{ document.conclusion }}
 
-## 3. Key points
+## 3. 要点
 
 {% for point in document.key_points %}
 {% if point.timestamp_seconds is none %}
@@ -60,7 +60,7 @@ noteId: {{ note_id }}
 {% endif %}
 {% endfor %}
 
-## 4. Structuring (from abstract to concrete)
+## 4. 構造（抽象から具体へ）
 
 {% for section in document.structuring %}
 ### {{ section.heading }}
@@ -77,7 +77,7 @@ noteId: {{ note_id }}
 {% endfor %}
 {% endfor %}
 
-## 5. Technical terms
+## 5. 専門用語
 
 {% for term in document.technical_terms %}
 - {{ term }}
