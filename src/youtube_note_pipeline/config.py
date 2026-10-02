@@ -21,13 +21,39 @@ DEFAULT_CONFIG_RESOURCE = "resources/config.example.yaml"
 CONFIG_SCHEMA_VERSION: Literal["1.0.0"] = "1.0.0"
 
 
-def _merge(base: dict[str, Any], layer: dict[str, Any]) -> dict[str, Any]:
+def _setting_paths(value: Any, prefix: str = "") -> list[str]:
+    if isinstance(value, dict) and value:
+        return [
+            path for key, item in value.items()
+            for path in _setting_paths(item, f"{prefix}.{key}" if prefix else str(key))
+        ]
+    if isinstance(value, list) and value:
+        return [
+            path for index, item in enumerate(value)
+            for path in _setting_paths(item, f"{prefix}[{index}]")
+        ]
+    return [prefix]
+
+
+def _merge(
+    base: dict[str, Any], layer: dict[str, Any],
+    winning_sources: dict[str, str] | None = None,
+    source: str = "built-in defaults", prefix: str = "",
+) -> dict[str, Any]:
     result = deepcopy(base)
     for key, value in layer.items():
+        name = f"{prefix}.{key}" if prefix else key
         if isinstance(value, dict) and isinstance(result.get(key), dict):
-            result[key] = _merge(result[key], value)
+            result[key] = _merge(result[key], value, winning_sources, source, name)
+            if value and winning_sources is not None:
+                winning_sources.pop(name, None)
         else:
             result[key] = deepcopy(value)
+            if winning_sources is not None:
+                for path in list(winning_sources):
+                    if path == name or path.startswith((f"{name}.", f"{name}[")):
+                        del winning_sources[path]
+                winning_sources.update(dict.fromkeys(_setting_paths(value, name), source))
     return result
 
 
@@ -112,6 +138,8 @@ class PipelineConfig(BaseModel):
 class ResolvedConfig(BaseModel):
     config: PipelineConfig
     sources: list[str]
+    winning_sources: dict[str, str] = Field(default_factory=dict)
+    source_schema_versions: list[dict[str, Any]] = Field(default_factory=list)
 
 
 def user_root() -> Path:
@@ -212,23 +240,38 @@ def resolve_config(
     current = (cwd or Path.cwd()).resolve()
     values = default_values()
     sources = ["built-in defaults"]
+    winning_sources = dict.fromkeys(_setting_paths(values), sources[0])
+    source_schema_versions: list[dict[str, Any]] = []
     candidates = [global_config_path(), current / ".tkn" / "config.yaml"]
     if explicit_config:
         candidates.append(explicit_config.expanduser().resolve())
     for path in candidates:
         if path.exists():
-            values = _merge(values, _load_yaml(path))
+            layer = _load_yaml(path)
+            has_schema_version = "schema_version" in layer
+            source_version = layer.pop("schema_version", None)
+            if has_schema_version and source_version != CONFIG_SCHEMA_VERSION:
+                raise ValueError(
+                    f"invalid configuration: schema_version in {path} must be "
+                    f"{CONFIG_SCHEMA_VERSION}; got {source_version!r}"
+                )
+            values = _merge(values, layer, winning_sources, str(path))
             sources.append(str(path))
+            source_schema_versions.append({
+                "path": str(path), "schema_version": source_version, "migrated": False,
+            })
     effective_overrides = {k: v for k, v in (overrides or {}).items() if v is not None}
     if effective_overrides:
         generation = values["generation"]
         if not isinstance(generation, dict) or not isinstance(generation.get("profiles"), dict):
             raise ValueError("generation and generation.profiles must be mappings")
+        generation_overrides: dict[str, Any] = {}
         if "profile" in effective_overrides:
-            generation["active_profile"] = effective_overrides.pop("profile")
+            generation_overrides["active_profile"] = effective_overrides.pop("profile")
         if "summary_profile" in effective_overrides:
-            generation["summary_profile"] = effective_overrides.pop("summary_profile")
-        _, selected = _selected_values(values)
+            generation_overrides["summary_profile"] = effective_overrides.pop("summary_profile")
+        active, _ = _selected_values(_merge(values, {"generation": generation_overrides}))
+        selected: dict[str, Any] = {}
         if "bridge_profile" in effective_overrides:
             selected["bridge_profile"] = effective_overrides.pop("bridge_profile")
         for cli_key, bridge_key in (
@@ -236,14 +279,47 @@ def resolve_config(
         ):
             if cli_key in effective_overrides:
                 selected.setdefault("overrides", {})[bridge_key] = effective_overrides.pop(cli_key)
-        values.update(effective_overrides)
+        if selected:
+            generation_overrides["profiles"] = {active: selected}
+        if generation_overrides:
+            effective_overrides["generation"] = generation_overrides
+        values = _merge(values, effective_overrides, winning_sources, "CLI options")
         sources.append("CLI options")
     try:
         config = PipelineConfig.model_validate(_resolve_paths(values, current))
     except Exception as exc:
         raise ValueError(f"invalid configuration: {exc}") from exc
-    return ResolvedConfig(config=config, sources=sources)
+    return ResolvedConfig(
+        config=config, sources=sources,
+        winning_sources={
+            path: winning_sources.get(path, "built-in defaults")
+            for path in _setting_paths(public_config(config))
+        },
+        source_schema_versions=source_schema_versions,
+    )
 
 
 def public_config(config: PipelineConfig) -> dict[str, Any]:
-    return config.model_dump(mode="json", exclude_none=True)
+    values = config.model_dump(mode="json", exclude_none=True)
+    for profile in values["generation"]["profiles"].values():
+        profile["overrides"] = _without_secrets(profile["overrides"])
+    return values
+
+
+def _without_secrets(value: Any) -> Any:
+    """Omit credential fields even in inactive profiles' unvalidated overrides."""
+    if isinstance(value, dict):
+        secret_names = {
+            "api_key", "password", "secret", "token", "authorization", "credentials",
+        }
+        return {
+            key: _without_secrets(item)
+            for key, item in value.items()
+            if str(key).lower().replace("-", "_") not in secret_names
+            and not str(key).lower().replace("-", "_").endswith(
+                ("_api_key", "_password", "_secret", "_token")
+            )
+        }
+    if isinstance(value, list):
+        return [_without_secrets(item) for item in value]
+    return value

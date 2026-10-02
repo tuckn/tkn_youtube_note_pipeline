@@ -16,24 +16,24 @@ def test_cli_program_name() -> None:
 
 
 def test_logging_defaults_to_info() -> None:
-    args = build_parser().parse_args(["config", "show"])
+    args = build_parser().parse_args(["config", "list"])
     _configure_logging(args)
     assert logging.getLogger().level == logging.INFO
 
 
 def test_quiet_and_verbose_logging_levels() -> None:
-    quiet = build_parser().parse_args(["config", "show", "--quiet"])
+    quiet = build_parser().parse_args(["config", "list", "--quiet"])
     _configure_logging(quiet)
     assert logging.getLogger().level == logging.ERROR
 
-    verbose = build_parser().parse_args(["config", "show", "--verbose"])
+    verbose = build_parser().parse_args(["config", "list", "--verbose"])
     _configure_logging(verbose)
     assert logging.getLogger().level == logging.DEBUG
 
 
 def test_quiet_and_verbose_are_mutually_exclusive() -> None:
     with pytest.raises(SystemExit):
-        build_parser().parse_args(["config", "show", "--quiet", "--verbose"])
+        build_parser().parse_args(["config", "list", "--quiet", "--verbose"])
 
 
 @pytest.mark.parametrize(
@@ -85,7 +85,7 @@ def test_ingest_accepts_overwrite_aliases(option: str) -> None:
     assert args.overwrite is True
 
 
-def test_config_show_reports_prompt_provenance(
+def test_config_list_reports_prompt_provenance(
     tmp_path: Path, monkeypatch, capsys
 ) -> None:
     monkeypatch.setattr(
@@ -93,7 +93,7 @@ def test_config_show_reports_prompt_provenance(
         lambda: tmp_path / "missing-global.yaml",
     )
 
-    assert main(["config", "show", "--quiet"]) == 0
+    assert main(["config", "list", "--json", "--quiet"]) == 0
     payload = json.loads(capsys.readouterr().out)
     assert payload["values"]["generation"]["summary_profile"] == "default-ja"
     profile = payload["values"]["summary_profile_details"]
@@ -116,13 +116,13 @@ def test_config_show_reports_prompt_provenance(
     assert profile["template"]["note_schema_version"] == "5.0"
 
 
-def test_config_show_uses_summary_profile_cli_override(tmp_path: Path, monkeypatch, capsys) -> None:
+def test_config_list_uses_summary_profile_cli_override(tmp_path: Path, monkeypatch, capsys) -> None:
     monkeypatch.setattr(
         "youtube_note_pipeline.config.global_config_path",
         lambda: tmp_path / "missing-global.yaml",
     )
 
-    assert main(["config", "show", "--summary-profile", "default-en", "--quiet"]) == 0
+    assert main(["config", "list", "--json", "--summary-profile", "default-en", "--quiet"]) == 0
     payload = json.loads(capsys.readouterr().out)
     assert payload["values"]["generation"]["summary_profile"] == "default-en"
     assert payload["values"]["summary_profile_details"]["name"] == "default-en"
@@ -143,7 +143,7 @@ def test_config_init_is_idempotent_and_refuses_edited_file(
     assert "bridge_profile: codex-default" in target.read_text(encoding="utf-8")
     assert "summary_profile: default-ja" in target.read_text(encoding="utf-8")
 
-    assert main(["config", "show", "--quiet"]) == 0
+    assert main(["config", "list", "--json", "--quiet"]) == 0
     shown = json.loads(capsys.readouterr().out)
     assert shown["values"]["generation"]["profiles"]["codex"]["bridge_profile"] == "codex-default"
     assert shown["values"]["fallback_languages"] == []

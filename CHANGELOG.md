@@ -9,6 +9,12 @@
 
 ### 変更
 
+- `config show` を `config list` に変更。既定では `git config --list` のような
+  `key=value` 形式で表示し、`--json` で従来の JSON 項目と追加情報を取得できます。
+  各設定値の決定元、source と effective の schema version、migration の有無を表示。
+  旧コマンドは削除したため、自動処理は `config list --json` に変更し、
+  通常インストール済みの CLI は `uv tool install . --reinstall` で更新してください。
+
 - 日本語テンプレートを 1.2 に更新し、5つの見出しを日本語化。
   既存ノートの見出しだけを日本語化した場合も、生成時の来歴を保持して検証可能。
 

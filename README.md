@@ -183,18 +183,43 @@ summary_root: 'C:\path\to\vault\YouTube'
 ### 設定を確認する
 
 ```shell
-tkn-youtube-note config show
+tkn-youtube-note config list
 ```
 
-表示される JSON の主な見どころは次のとおりです。この操作は読み取り専用で、生成AIの呼び出しやファイル作成は行いません。
+既定では `git config --list` のように、1行に1つの `key=value` を表示します。
+この操作は読み取り専用で、生成AIの呼び出しや通信、設定・state・cache・レポートの作成・更新は行いません。
+Windows のパスは引用符や二重の backslash を付けず、そのままコピーできます。
+入れ子のキーは `.`、配列の要素は `[0]` などで表示し、空の配列・mapping は `[]`・`{}`、
+boolean は `true` / `false`、未設定値は `null` と表示します。改行などの制御文字は escape します。
+
+```text
+values.generation.summary_profile=default-ja
+values.generation.active_profile=codex
+values.fallback_languages=[]
+winning_sources.generation.active_profile=built-in defaults
+effective_schema_version=1.0.0
+```
+
+自動処理で JSON が必要な場合は、次のように指定します。
+
+```shell
+tkn-youtube-note config list --json
+```
+
+主な見どころは次のとおりです。どちらの形式でも secret は表示せず、ログは標準エラーへ出します。
 
 | キー                 | 確認すること                                                                 |
 | -------------------- | ---------------------------------------------------------------------------- |
 | `values`             | `raw_root`・`source_root`・`summary_root`・`reports_root` が意図した保存先か |
 | `sources`            | どの設定ファイルが読み込まれたか                                             |
+| `winning_sources`    | 設定の各項目が、どのファイル・CLI オプション・既定値から決まったか             |
+| `source_schema_versions` | 読み込んだファイルの `schema_version` と `migrated`（移行の有無）         |
+| `effective_schema_version` | 内部で使う設定スキーマの版                                           |
 | `generationResolved` | 最終的に使われる接続先・モデル・待機上限                                     |
 
 作業フォルダの `./.tkn/config.yaml` も読み込まれるため、想定外の値が出たら[設定の優先順位](#設定の優先順位)を確認してください。
+現在は設定の migration を行わないため `migrated` は `false` です。
+従来どおり `schema_version` を省略した設定も読み込み、その source の版は `null` と表示します。
 
 ## 基本的な使い方
 
@@ -309,7 +334,7 @@ tkn-youtube-note build-summary "<source-note>" --force             # 生成AIを
 |          | `status "<note>"`                                    | 形式の検証に加え、現在の要約プロファイルとの差分を表示                                 |
 |          | `migrate-notes`                                      | 古いノートの参照と形式宣言を修復                                                       |
 | 設定     | `config init`                                        | 設定ファイルを作成（編集済みなら上書きしない）                                         |
-|          | `config show`                                        | 最終的に有効な設定と、その設定元を表示                                                 |
+|          | `config list`                                        | 有効な設定と決定元を `key=value` で表示（`--json` で JSON）                                                 |
 
 `acquire`・`import-raw` も `--refresh` に対応し、`build-source`・`build-summary` も `--force` に対応します。
 
@@ -338,7 +363,8 @@ tkn-youtube-note build-summary "<source-note>" --force             # 生成AIを
 
 ### 出力と終了コード
 
-進捗ログは**標準エラー**、最終結果の JSON は**標準出力**に出ます。そのため JSON だけをパイプで他の処理へ渡せます（エラー時は標準エラーだけを出して終了する場合があります）。
+進捗ログは**標準エラー**、最終結果は**標準出力**に出ます。`config list` の既定表示は `key=value`、
+`config list --json` とその他のコマンドは JSON です。そのため JSON だけをパイプで他の処理へ渡せます（エラー時は標準エラーだけを出して終了する場合があります）。
 
 | ログ        | 意味                                                             |
 | ----------- | ---------------------------------------------------------------- |
@@ -376,7 +402,7 @@ tkn-youtube-note build-summary "<source-note>" --force             # 生成AIを
 
 - 設定ファイルには変更したい項目だけを書けば十分です。`generation.profiles` と `overrides` は項目単位で統合され、リストは全体が置き換わります。
 - 相対パスの保存先は、設定ファイルの場所ではなく**コマンドを実行したフォルダ**を基準に解決されます。
-- 存在しない設定ファイルは、`--config` で指定したものも含めてエラーにならず読み飛ばされます。指定したファイルが読まれたかは `config show --config "<file>"` の `sources` で確認してください。
+- 存在しない設定ファイルは、`--config` で指定したものも含めてエラーにならず読み飛ばされます。指定したファイルが読まれたかは `config list --config "<file>"` の `sources` で確認してください。
 - Bridge は作業フォルダの `./.tkn/config.yaml` を読まないため、この CLI の設定と Bridge の設定が混ざることはありません。
 
 ### 設定項目
@@ -450,7 +476,7 @@ generation:
 
 - `overrides` の項目と値は Bridge の規則で検証されます。Bridge の値をそのまま使う項目は書かないでください。
 - `overrides.model: null` は「モデル指定を解除して CLI 接続先の既定モデルを使う」という明示的な上書きです。
-- 最終的な接続条件は `config show` の `generationResolved` で確認できます。
+- 最終的な接続条件は `config list` の `generationResolved` で確認できます。
 
 #### 例：ローカル LLM（Ollama）を使う
 
@@ -481,7 +507,7 @@ generation:
 ```
 
 ```shell
-tkn-youtube-note config show --profile local
+tkn-youtube-note config list --profile local
 tkn-youtube-note build-summary "<source-note>" --profile local --dry-run
 ```
 

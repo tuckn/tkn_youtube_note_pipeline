@@ -16,6 +16,7 @@ from youtube_note_pipeline.config import (
     public_config,
     resolve_config,
 )
+from youtube_note_pipeline.config_display import config_lines
 from youtube_note_pipeline.console_logging import ColorFormatter, log_success, supports_color
 from youtube_note_pipeline.contracts import summary_currency
 from youtube_note_pipeline.inventory import build_inventory
@@ -169,8 +170,13 @@ def build_parser() -> argparse.ArgumentParser:
 
     config_parser = subparsers.add_parser("config", help="configuration operations")
     config_subparsers = config_parser.add_subparsers(dest="config_command", required=True)
-    show = config_subparsers.add_parser("show", help="show resolved non-secret configuration")
-    _common(show)
+    listing = config_subparsers.add_parser(
+        "list",
+        help="list resolved non-secret settings and sources as key=value (read-only)",
+        description="Read settings without writing files or invoking AI; print key=value lines.",
+    )
+    _common(listing)
+    listing.add_argument("--json", action="store_true", help="print the full result as JSON")
     config_init = config_subparsers.add_parser(
         "init",
         help="create the user-global configuration without overwriting edits",
@@ -338,17 +344,18 @@ def main(argv: list[str] | None = None) -> int:
                     "note_schema_version": profile.template.note_schema_version,
                 },
             }
-            print(
-                json.dumps(
-                    {
-                        "sources": resolved.sources,
-                        "values": values,
-                        "generationResolved": generation_resolved,
-                    },
-                    ensure_ascii=False,
-                    indent=2,
-                )
-            )
+            config_payload = {
+                "sources": resolved.sources,
+                "values": values,
+                "generationResolved": generation_resolved,
+                "winning_sources": resolved.winning_sources,
+                "source_schema_versions": resolved.source_schema_versions,
+                "effective_schema_version": config.schema_version,
+            }
+            if args.json:
+                print(json.dumps(config_payload, ensure_ascii=False, indent=2))
+            else:
+                print("\n".join(config_lines(config_payload)))
             return 0
         if args.command == "ingest":
             stages, report = ingest(

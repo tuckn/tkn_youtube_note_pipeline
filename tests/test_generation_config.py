@@ -46,7 +46,10 @@ def test_nested_layers_and_cli_overrides_preserve_other_profiles(isolated):
     }
 
 
-def test_config_show_resolves_selected_bridge_and_never_runs_ai(isolated, monkeypatch, capsys):
+@pytest.mark.parametrize("output_options", [[], ["--json"]])
+def test_config_list_resolves_selected_bridge_and_never_runs_ai(
+    isolated, monkeypatch, capsys, output_options,
+):
     root, user = isolated
     write(root / "bridge.yaml", {"schema_version": "1.1.0", "profiles": {
         "local-notes": {"provider": "ollama", "model": "fixture", "local_only": True},
@@ -57,8 +60,18 @@ def test_config_show_resolves_selected_bridge_and_never_runs_ai(isolated, monkey
         "tkn_genai_bridge.Runtime.generate", Mock(side_effect=AssertionError("AI generation")),
     )
     before = {p: p.read_bytes() for p in root.rglob("*") if p.is_file()}
-    assert main(["config", "show", "--profile", "local", "--quiet"]) == 0
-    payload = json.loads(capsys.readouterr().out)
+    assert main(["config", "list", "--profile", "local", "--quiet", *output_options]) == 0
+    captured = capsys.readouterr()
+    assert captured.err == ""
+    if not output_options:
+        lines = captured.out.splitlines()
+        assert "generationResolved.provider=ollama" in lines
+        assert "generationResolved.model=fixture" in lines
+        assert "generationResolved.local_only=true" in lines
+        assert "generationResolved.will_call_provider=false" in lines
+        assert before == {p: p.read_bytes() for p in root.rglob("*") if p.is_file()}
+        return
+    payload = json.loads(captured.out)
     assert payload["values"]["generation"]["active_profile"] == "local"
     resolved = payload["generationResolved"]
     assert resolved["active_profile"] == "local"
@@ -79,13 +92,20 @@ def test_config_show_resolves_selected_bridge_and_never_runs_ai(isolated, monkey
     {"profiles": {"codex": None}},
     None,
 ])
-def test_invalid_configuration_show_fails_without_writes(isolated, capsys, generation):
+@pytest.mark.parametrize("output_options", [[], ["--json"]])
+def test_invalid_configuration_list_fails_without_writes(
+    isolated, capsys, generation, output_options,
+):
     root, user = isolated
     reports = root / "reports"
     write(user, {"reports_root": str(reports), "generation": generation})
     before = {p: p.read_bytes() for p in root.rglob("*") if p.is_file()}
-    assert main(["config", "show", "--reports-root", str(reports), "--quiet"]) == 1
-    assert capsys.readouterr().err
+    assert main([
+        "config", "list", "--reports-root", str(reports), "--quiet", *output_options,
+    ]) == 1
+    captured = capsys.readouterr()
+    assert captured.err
+    assert captured.out == ""
     assert not reports.exists()
     assert before == {p: p.read_bytes() for p in root.rglob("*") if p.is_file()}
 
