@@ -63,7 +63,13 @@ def test_youtube_dl_cache_uses_user_cache_root(tmp_path: Path, monkeypatch) -> N
     "https://i.ytimg.com/vi_webp/TESTVID0001/maxresdefault.webp",
     None,
 ])
-def test_import_uses_standard_thumbnail_and_preserves_raw(tmp_path: Path, thumbnail) -> None:
+def test_import_uses_standard_thumbnail_and_preserves_raw(
+    tmp_path: Path, thumbnail, monkeypatch,
+) -> None:
+    def unexpected_network(video_id):
+        raise AssertionError("import must not check thumbnail availability online")
+
+    monkeypatch.setattr("youtube_note_pipeline.raw.resolve_thumbnail_url", unexpected_network)
     metadata = json.loads((FIXTURES / "metadata.info.json").read_text(encoding="utf-8"))
     metadata["thumbnail"] = thumbnail
     metadata_path = tmp_path / "metadata.info.json"
@@ -73,7 +79,7 @@ def test_import_uses_standard_thumbnail_and_preserves_raw(tmp_path: Path, thumbn
     )
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     assert manifest["video"]["thumbnail"] == (
-        "https://i.ytimg.com/vi/TESTVID0001/maxresdefault.jpg"
+        "https://i.ytimg.com/vi/TESTVID0001/hqdefault.jpg"
     )
     captured_metadata = json.loads(
         (manifest_path.parent / "metadata.info.json").read_text(encoding="utf-8")

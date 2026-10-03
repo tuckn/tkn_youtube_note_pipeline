@@ -132,7 +132,7 @@ def test_full_synthetic_pipeline_and_idempotency(
     initial_source_metadata, _ = split_note(source.path.read_text(encoding="utf-8"))
     assert initial_source_metadata["schemaVersion"] == "1.0"
     assert initial_source_metadata["description"] == ""
-    assert initial_source_metadata["cover"].endswith("/maxresdefault.jpg")
+    assert initial_source_metadata["cover"].endswith("/hqdefault.jpg")
     assert build_source(manifest, tmp_path / "source").status == "unchanged"
 
     summary = build_summary(source.path, tmp_path / "summary", FakeProvider())
@@ -694,7 +694,7 @@ def test_legacy_localized_thumbnail_builds_standard_cover(
         FIXTURES / "metadata.info.json", FIXTURES / "captions.ja.json3", tmp_path / "raw",
     )
     localized = "https://i.ytimg.com/vi_lc/TESTVID0001/maxresdefault_en-US.jpg"
-    standard = "https://i.ytimg.com/vi/TESTVID0001/maxresdefault.jpg"
+    standard = "https://i.ytimg.com/vi/TESTVID0001/hqdefault.jpg"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     manifest["video"]["thumbnail"] = localized
     manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
@@ -723,3 +723,23 @@ def test_legacy_localized_thumbnail_builds_standard_cover(
     assert raw_before == {
         path.name: path.read_bytes() for path in manifest_path.parent.iterdir()
     }
+
+
+
+@pytest.mark.parametrize("image", ["maxresdefault", "sddefault", "hqdefault"])
+def test_selected_standard_thumbnail_reaches_source_and_summary(tmp_path: Path, image: str):
+    manifest_path = import_raw(
+        FIXTURES / "metadata.info.json", FIXTURES / "captions.ja.json3", tmp_path / "raw",
+    )
+    selected = f"https://i.ytimg.com/vi/TESTVID0001/{image}.jpg"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["video"]["thumbnail"] = selected
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    raw_before = manifest_path.read_bytes()
+    source = build_source(manifest_path, tmp_path / "source")
+    summary = build_summary(source.path, tmp_path / "summary", FakeProvider())
+    for path in (source.path, summary.path):
+        metadata, _ = split_note(path.read_text(encoding="utf-8"))
+        assert metadata["cover"] == selected
+    assert validate_summary(summary.path, tmp_path / "source") == []
+    assert manifest_path.read_bytes() == raw_before

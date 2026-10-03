@@ -537,6 +537,12 @@ YouTube から取り直す必要がなければ、残りの段階だけを個別
 | 生成AIの起動・生成に失敗する             | `active_profile`・`bridge_profile` と、Bridge 側の実行ファイル・認証・モデルを確認します。詳細はレポートの `provider_error.code` と `provider_error.generation_record` にあります。       |
 | 生成がタイムアウトする                   | `timeout_seconds`（Bridge 側または `overrides`）を延ばします。レポートで `submission_unknown` が `true` の場合、接続先で処理・課金が完了したか不明なため、確認してから再実行してください。 |
 
+### サムネイル画像について
+
+ネット取得時は、言語別画像ではなく通常の JPEG を、`maxresdefault.jpg` → `sddefault.jpg` → `hqdefault.jpg` の順に確認して選びます。最高解像度の画像がない動画でも、取得できるサイズを `cover` に記録します。画像確認に失敗した場合は通常サイズの URL を使い、警告を表示します。
+
+`import-raw` は画像確認のための通信を行わず、`hqdefault.jpg` を使います。`build-source` は取得データの通常 JPEG を引き継ぎ、言語別画像などの場合は通常サイズに置き換えます。要約は文字起こしノートの `cover` を引き継ぎます。既存ノートの `cover` は自動では変更しません。
+
 ### 字幕取得について補足
 
 - 翻訳字幕より、自動翻訳されていない字幕を優先して選びます。翻訳字幕しかない動画では、YouTube の制限により 429 エラーになりやすくなります。

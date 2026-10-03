@@ -134,7 +134,7 @@ def render_source(
         f"schemaVersion: {yaml_quote(SOURCE_NOTE_SCHEMA_VERSION)}",
         f"title: {yaml_quote(video.title)}",
         'description: ""',
-        f"cover: {standard_thumbnail_url(video.video_id)}",
+        f"cover: {standard_thumbnail_url(video.video_id, video.thumbnail)}",
         f"url: {video.canonical_url}",
         "linkStatus: active",
         "domain: youtube.com",

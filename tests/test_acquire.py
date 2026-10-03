@@ -59,6 +59,10 @@ def downloader(monkeypatch):
             Path(filename).write_bytes(self.body)
             return self.success, True
 
+    monkeypatch.setattr(
+        "youtube_note_pipeline.raw.resolve_thumbnail_url",
+        lambda video_id: f"https://i.ytimg.com/vi/{video_id}/maxresdefault.jpg",
+    )
     instance = Downloader()
     monkeypatch.setattr(yt_dlp, "YoutubeDL", lambda options: instance)
     return instance
@@ -158,3 +162,27 @@ def test_no_allowed_caption_does_not_download(tmp_path, downloader):
     assert manifest["error"] == "No allowed complete caption track was available"
     assert manifest["video"]["title"] == downloader.info["title"]
     assert not downloader.calls
+
+
+
+def test_thumbnail_fallback_creates_new_capture_without_changing_raw(
+    tmp_path, downloader, monkeypatch,
+):
+    first = acquire(URL, tmp_path, [])
+    before = {path.name: path.read_bytes() for path in first.parent.iterdir()}
+    monkeypatch.setattr(
+        "youtube_note_pipeline.raw.resolve_thumbnail_url",
+        lambda video_id: f"https://i.ytimg.com/vi/{video_id}/sddefault.jpg",
+    )
+    second = acquire(URL, tmp_path, [])
+    assert first != second
+    manifest = json.loads(second.read_text(encoding="utf-8"))
+    assert manifest["video"]["thumbnail"].endswith("/sddefault.jpg")
+    assert before == {path.name: path.read_bytes() for path in first.parent.iterdir()}
+    assert (first.parent / "metadata.info.json").read_bytes() == (
+        second.parent / "metadata.info.json"
+    ).read_bytes()
+    assert (first.parent / "captions.ja.json3").read_bytes() == (
+        second.parent / "captions.ja.json3"
+    ).read_bytes()
+    assert acquire(URL, tmp_path, []) == second

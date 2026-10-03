@@ -20,7 +20,7 @@ from youtube_note_pipeline.models import (
     RawCaptureManifest,
     VideoSource,
 )
-from youtube_note_pipeline.thumbnails import standard_thumbnail_url
+from youtube_note_pipeline.thumbnails import resolve_thumbnail_url, standard_thumbnail_url
 
 VIDEO_ID = re.compile(r"^[A-Za-z0-9_-]{11}$")
 
@@ -64,7 +64,9 @@ def _published(info: dict[str, Any]) -> str:
     raise ValueError("YouTube metadata does not contain a publication date")
 
 
-def video_source(info: dict[str, Any], canonical_url: str) -> VideoSource:
+def video_source(
+    info: dict[str, Any], canonical_url: str, thumbnail_url: str | None = None,
+) -> VideoSource:
     author = info.get("uploader") or info.get("channel")
     video_id = str(info.get("id") or canonical_video_url(canonical_url)[0])
     return VideoSource(
@@ -76,7 +78,7 @@ def video_source(info: dict[str, Any], canonical_url: str) -> VideoSource:
         author_url=info.get("uploader_url") or info.get("channel_url"),
         published=_published(info),
         duration_seconds=float(info["duration"]) if info.get("duration") is not None else None,
-        thumbnail=standard_thumbnail_url(video_id),
+        thumbnail=standard_thumbnail_url(video_id, thumbnail_url),
         original_language=info.get("language") or info.get("original_language"),
     )
 
@@ -99,8 +101,9 @@ def _write_capture(
     captured_at: datetime,
     refresh: bool,
     dry_run: bool = False,
+    thumbnail_url: str | None = None,
 ) -> Path:
-    source = video_source(info, canonical_url)
+    source = video_source(info, canonical_url, thumbnail_url)
     metadata_data = json.dumps(info, ensure_ascii=False, indent=2, sort_keys=True).encode("utf-8")
     artifacts = {"metadata": _artifact("metadata.info.json", metadata_data)}
     if caption_data is not None and selection is not None:
@@ -128,7 +131,11 @@ def _write_capture(
             except Exception:
                 continue
             hashes = {key: value.sha256 for key, value in previous.artifacts.items()}
-            if previous.status == "success" and hashes == expected:
+            if (
+                previous.status == "success"
+                and hashes == expected
+                and previous.video.thumbnail == source.thumbnail
+            ):
                 return existing
     target = video_root / _capture_name(captured_at)
     suffix = 1
@@ -209,9 +216,11 @@ def acquire(
             caption_data = _download_caption(ydl, info, track)
         stage = "caption validation"
         parse_json3(caption_data)
+        thumbnail_url = resolve_thumbnail_url(video_id)
         stage = "raw storage"
         return _write_capture(
-            raw_root, info, canonical_url, caption_data, selection, None, captured_at, refresh
+            raw_root, info, canonical_url, caption_data, selection, None, captured_at, refresh,
+            thumbnail_url=thumbnail_url,
         )
     except Exception as exc:
         error = f"{stage} acquisition failed: {exc}"
