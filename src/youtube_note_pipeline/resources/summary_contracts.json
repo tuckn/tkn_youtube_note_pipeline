@@ -53,6 +53,42 @@
       ],
       "summary_heading": "## 1. 要約",
       "conclusion_heading": "## 2. 結論"
+    },
+    {
+      "id": "682b27ed-e542-4795-b295-107dbebe82f4",
+      "version": "1.4",
+      "schema_version": "5.0",
+      "hashes": [
+        "048289627330047e9f9cf3912fb3bc0855e406b43c1219c1bc5a649d14dec668",
+        "ed81a9aa6419ff192dd17e82864d12642d5d46d0b9d8b7ec95257fdf3bbab9d1"
+      ],
+      "headings": [
+        "## 1. Summary",
+        "## 2. Conclusion",
+        "## 3. Key points",
+        "## 4. Structuring (from abstract to concrete)",
+        "## 5. Technical terms"
+      ],
+      "summary_heading": "## 1. Summary",
+      "conclusion_heading": "## 2. Conclusion"
+    },
+    {
+      "id": "682b27ed-e542-4795-b295-107dbebe82f4",
+      "version": "1.3",
+      "schema_version": "5.0",
+      "hashes": [
+        "812dcfb2bf18fc043353a101bdfb2de39d344b37ff4230c10b09c31dc5a2cafa",
+        "841b265b51ad59ddb0c236ddf394aaf44e291599afa5ddccf835a7c0104d63e2"
+      ],
+      "headings": [
+        "## 1. 要約",
+        "## 2. 結論",
+        "## 3. 要点",
+        "## 4. 構造（抽象から具体へ）",
+        "## 5. 専門用語"
+      ],
+      "summary_heading": "## 1. 要約",
+      "conclusion_heading": "## 2. 結論"
     }
   ],
   "output_schemas": [

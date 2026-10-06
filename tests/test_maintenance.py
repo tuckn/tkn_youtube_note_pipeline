@@ -49,7 +49,7 @@ def test_migration_repairs_renamed_source_and_preserves_reviewed_bytes(
     text = "\n".join(line for line in text.splitlines() if not line.startswith(removed)) + "\n"
     text = text.replace('schemaVersion: "5.0"', f'schemaVersion: "{version}"')
     text = text.replace("reviewStatus: unreviewed", "reviewStatus: accepted")
-    text = text.replace("date:", "tags: [user-edit]\ndate:", 1)
+    text = text.replace("created:", "tags: [user-edit]\ndate:", 1)
     # Preserve Windows line endings and user prose exactly.
     summary.write_bytes(text.replace("\n", "\r\n").encode("utf-8"))
     original = summary.read_bytes()
@@ -68,7 +68,7 @@ def test_migration_repairs_renamed_source_and_preserves_reviewed_bytes(
     assert Path(result["files"][0]["backup"]).read_bytes() == original
     metadata, body = split_note(summary.read_text(encoding="utf-8"))
     assert body == original_body
-    for key in ("noteId", "date", "updated", "reviewStatus", "tags", "description"):
+    for key in ("noteId", "created", "updated", "reviewStatus", "tags", "description"):
         assert metadata[key] == original_metadata[key]
     assert metadata["source"] == path_to_file_uri(moved)
     assert metadata["sourceNoteId"] == split_note(moved.read_text(encoding="utf-8"))[0]["noteId"]

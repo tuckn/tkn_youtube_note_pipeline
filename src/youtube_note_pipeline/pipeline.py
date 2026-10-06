@@ -143,8 +143,8 @@ def build_source(
     if transcript_errors:
         raise ValueError("source validation failed: " + "; ".join(transcript_errors))
     if dry_run:
-        if existing_metadata and existing_metadata.get("date") is not None:
-            _frontmatter_datetime(existing_metadata["date"])
+        if existing_metadata and existing_metadata.get("created") is not None:
+            _frontmatter_datetime(existing_metadata["created"])
         return StageResult(
             target,
             "planned",
@@ -159,8 +159,8 @@ def build_source(
     existing_date = None
     if existing_metadata is not None:
         existing_note_id = str(existing_metadata.get("noteId") or "") or None
-        if existing_metadata.get("date") is not None:
-            existing_date = _frontmatter_datetime(existing_metadata["date"])
+        if existing_metadata.get("created") is not None:
+            existing_date = str(existing_metadata["created"])
     text = render_source(
         manifest,
         segments,
@@ -376,8 +376,8 @@ def build_summary(
         input_hash=input_hash,
     )
     if dry_run:
-        if existing_metadata and existing_metadata.get("date"):
-            _frontmatter_datetime(existing_metadata["date"])
+        if existing_metadata and existing_metadata.get("created"):
+            _frontmatter_datetime(existing_metadata["created"])
         action, reason = decide_summary_action(existing_metadata, provider, overwrite)
         return StageResult(
             target,
@@ -417,8 +417,8 @@ def build_summary(
     now = datetime.now().astimezone()
     existing_note_id = str(existing_metadata.get("noteId")) if existing_metadata else None
     existing_date = (
-        _frontmatter_datetime(existing_metadata["date"])
-        if existing_metadata and existing_metadata.get("date")
+        str(existing_metadata["created"])
+        if existing_metadata and existing_metadata.get("created")
         else None
     )
     text = render_summary(

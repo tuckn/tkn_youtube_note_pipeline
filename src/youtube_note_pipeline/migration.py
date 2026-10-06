@@ -15,6 +15,7 @@ from youtube_note_pipeline.naming import file_uri_to_path, path_to_file_uri
 from youtube_note_pipeline.notes import split_note
 from youtube_note_pipeline.raw import canonical_video_url
 from youtube_note_pipeline.validation import validate_summary
+from youtube_note_pipeline.yaml_format import yaml_quote
 
 
 def _metadata(payload: bytes) -> dict[str, Any]:
@@ -40,15 +41,16 @@ def patch_metadata(payload: bytes, changes: dict[str, Any]) -> bytes:
         raise ValueError("missing Frontmatter delimiter")
     frontmatter, rest = text[:boundary], text[boundary:]
     for key, value in changes.items():
-        line = f"{key}: {json.dumps(value, ensure_ascii=False)}"
+        scalar = yaml_quote(value) if isinstance(value, str) else json.dumps(value)
+        line = f"{key}: {scalar}"
         pattern = rf"(?m)^{re.escape(key)}:[^\r\n]*"
         if re.search(pattern, frontmatter):
             frontmatter = re.sub(pattern, line.replace("\\", "\\\\"), frontmatter)
         else:
-            # Keep date / updated / noteId as the final three properties.
-            marker = newline + "date:"
+            # Keep created / updated / noteId as the final three properties.
+            marker = newline + ("created:" if newline + "created:" in frontmatter else "date:")
             if marker not in frontmatter:
-                raise ValueError("cannot insert metadata without a date field")
+                raise ValueError("cannot insert metadata without a created/date field")
             frontmatter = frontmatter.replace(marker, newline + line + marker, 1)
     result = (frontmatter + rest).encode("utf-8")
     return (b"\xef\xbb\xbf" if payload.startswith(b"\xef\xbb\xbf") else b"") + result

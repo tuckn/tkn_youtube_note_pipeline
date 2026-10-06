@@ -1,5 +1,6 @@
 schema_version: "1.0.0"
 
+# Windows paths use single quotes, e.g. 'C:\path\to\notes'.
 # Application-owned storage. Changing roots does not move existing files.
 raw_root: ~/.tkn/youtube_note_pipeline/data/raw
 source_root: ~/.tkn/youtube_note_pipeline/data/source

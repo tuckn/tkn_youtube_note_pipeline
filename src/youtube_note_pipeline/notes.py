@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import re
 import uuid
 from datetime import datetime
@@ -20,13 +19,10 @@ from youtube_note_pipeline.summary_resources import (
     render_summary_template,
 )
 from youtube_note_pipeline.thumbnails import standard_thumbnail_url
+from youtube_note_pipeline.yaml_format import load_yaml, normalize_note, yaml_quote
 
 SOURCE_NOTE_SCHEMA_VERSION = "1.0"
 DESCRIPTION_MAX_CHARS = 240
-
-
-def yaml_quote(value: str) -> str:
-    return json.dumps(value, ensure_ascii=False)
 
 
 def compact_description(value: str, max_chars: int = DESCRIPTION_MAX_CHARS) -> str:
@@ -47,11 +43,13 @@ def split_note(text: str) -> tuple[dict[str, Any], str]:
     if end < 0:
         raise ValueError("frontmatter closing delimiter is missing")
     try:
-        metadata = yaml.safe_load(normalized[4:end])
+        metadata = load_yaml(normalized[4:end])
     except yaml.YAMLError as exc:
         raise ValueError(f"invalid YAML frontmatter: {exc}") from exc
     if not isinstance(metadata, dict):
         raise ValueError("frontmatter must be a mapping")
+    if "date" in metadata and "created" not in metadata:
+        metadata["created"] = metadata.pop("date")
     return dict(metadata), normalized[end + 5 :]
 
 
@@ -95,7 +93,7 @@ def update_source_description(text: str, description: str, updated: datetime) ->
     lines = normalized[:end].splitlines()
     replacements = {
         "description": f"description: {yaml_quote(compact_description(description))}",
-        "updated": f"updated: {updated.isoformat(timespec='seconds')}",
+        "updated": f"updated: {yaml_quote(updated.isoformat(timespec='seconds'))}",
     }
     replaced: set[str] = set()
     for index, line in enumerate(lines):
@@ -106,7 +104,7 @@ def update_source_description(text: str, description: str, updated: datetime) ->
     missing = set(replacements) - replaced
     if missing:
         raise ValueError(f"source frontmatter is missing: {', '.join(sorted(missing))}")
-    return "\n".join(lines) + normalized[end:]
+    return normalize_note(("\n".join(lines) + normalized[end:]).encode("utf-8")).decode("utf-8")
 
 
 def _cover_url(video: VideoSource) -> str:
@@ -119,10 +117,11 @@ def render_source(
     segments: list[TranscriptSegment],
     now: datetime,
     note_id: str | None = None,
-    created_at: datetime | None = None,
+    created_at: datetime | str | None = None,
 ) -> str:
     video = manifest.video
     created = created_at or now
+    created_text = created if isinstance(created, str) else created.isoformat(timespec="seconds")
     author_lines = ["author:"]
     if isinstance(video.author, str):
         author_lines = [f"author: {yaml_quote(video.author)}"]
@@ -140,10 +139,10 @@ def render_source(
         "domain: youtube.com",
         "favicon: https://www.youtube.com/favicon.ico",
         *author_lines,
-        f"published: {video.published}",
+        f"published: {yaml_quote(video.published)}",
         "generator: youtube-note-pipeline",
-        f"date: {created.isoformat(timespec='seconds')}",
-        f"updated: {now.isoformat(timespec='seconds')}",
+        f"created: {yaml_quote(created_text)}",
+        f"updated: {yaml_quote(now.isoformat(timespec='seconds'))}",
         f"noteId: {note_id or uuid.uuid4()}",
         "---",
         "",
@@ -174,12 +173,13 @@ def render_summary(
     generator: str,
     profile: SummaryProfile,
     note_id: str | None = None,
-    created_at: datetime | None = None,
+    created_at: datetime | str | None = None,
 ) -> str:
     created = created_at or now
+    created_text = created if isinstance(created, str) else created.isoformat(timespec="seconds")
     context: dict[str, object] = {
         "cover": _cover_url(video),
-        "created": created.isoformat(timespec="seconds"),
+        "created": created_text,
         "document": document,
         "generator": generator,
         "note_id": note_id or str(uuid.uuid4()),

@@ -35,7 +35,7 @@ SOURCE_FRONTMATTER_ORDER = [
     "author",
     "published",
     "generator",
-    "date",
+    "created",
     "updated",
     "noteId",
 ]
@@ -52,7 +52,7 @@ SUMMARY_FRONTMATTER_ORDER_V1 = [
     "source",
     "generator",
     "reviewStatus",
-    "date",
+    "created",
     "updated",
     "noteId",
 ]
@@ -71,7 +71,7 @@ SUMMARY_FRONTMATTER_ORDER_V2 = [
     "promptId",
     "promptVersion",
     "reviewStatus",
-    "date",
+    "created",
     "updated",
     "noteId",
 ]
@@ -89,7 +89,7 @@ SUMMARY_FRONTMATTER_ORDER_V3_V4 = [
     "promptId",
     "promptVersion",
     "reviewStatus",
-    "date",
+    "created",
     "updated",
     "noteId",
 ]
@@ -114,7 +114,7 @@ SUMMARY_FRONTMATTER_ORDER_CURRENT = [
     "templateVersion",
     "templateSha256",
     "reviewStatus",
-    "date",
+    "created",
     "updated",
     "noteId",
 ]
@@ -138,7 +138,7 @@ def _frontmatter_keys(text: str) -> list[str]:
     for line in normalized[4:end].splitlines():
         match = re.match(r"^([A-Za-z][A-Za-z0-9]*):", line)
         if match:
-            keys.append(match.group(1))
+            keys.append("created" if match.group(1) == "date" else match.group(1))
     return keys
 
 
@@ -148,8 +148,8 @@ def _validate_frontmatter_order(text: str, expected: list[str], kind: str) -> li
     errors = []
     if canonical != expected:
         errors.append(f"{kind} frontmatter fields are out of order")
-    if keys[-3:] != ["date", "updated", "noteId"]:
-        errors.append(f"{kind} date, updated, and noteId must be the final fields")
+    if keys[-3:] != ["created", "updated", "noteId"]:
+        errors.append(f"{kind} created, updated, and noteId must be the final fields")
     return errors
 
 
@@ -201,7 +201,7 @@ def validate_source(path: Path, require_transcript: bool = True) -> list[str]:
         "domain",
         "published",
         "generator",
-        "date",
+        "created",
         "updated",
         "noteId",
     ):
@@ -281,7 +281,7 @@ def validate_summary(
         "url",
         "source",
         "generator",
-        "date",
+        "created",
         "updated",
         "noteId",
     ):

@@ -593,7 +593,7 @@ tkn-youtube-note import-raw --metadata "<metadata-file>" --captions "<captions-f
 | 要約       | 文字起こしのファイル名 ＋ プロンプト ID の先頭8桁                   | `summary_root` 以下の `url` と `promptId` の組     |
 
 ファイル名ではなく Frontmatter で識別するため、同じ保存先の中であれば**ファイル名の変更やフォルダ移動をしても追跡されます**。
-既存ノートを再生成するときは `noteId` と `date` を保持し、`updated` を更新します。
+既存ノートを再生成するときは `noteId` と `created` を保持し、`updated` を更新します。
 要約は文字起こしノートへの参照（`source`）を持つため、文字起こしノートを移動した場合は [`migrate-notes`](#古いノートの参照と形式宣言を修復する) で参照を修復してください。
 
 ### 要約が再生成される条件
@@ -760,7 +760,7 @@ tkn-youtube-note status "<summary-note>" --summary-profile default-ja
 | 版 2.0 を宣言している `type: summary`    | 版 3.0 に変更                                                                                        |
 | 形式の宣言がないノート                   | 参照だけを修復（版は推測で付けない）                                                                 |
 
-- 変更するのは計画に載った Frontmatter の項目だけです。本文、独自に追加した項目、`reviewStatus`・`noteId`・`date`・`updated`、BOM、改行コードは保持します。
+- 変更するのは計画に載った Frontmatter の項目だけです。本文、独自に追加した項目、`reviewStatus`・`noteId`・`created`・`updated`、BOM、改行コードは保持します。
 - 適用時には計画を再計算してファイルのハッシュを照合します。計画後にノートを編集した場合は、計画を作り直してください。
 - `blocked` が残っていても `planned` の項目は適用されますが、終了コードは `1` になります。
 - 原本のバックアップと対象の対応は `reports_root/migrations/` の `result.json` に記録されます。結果を確認し終えるまでバックアップは残してください。修復後にもう一度計画を作り、`unchanged` になっていることを確認すると確実です。
@@ -826,3 +826,7 @@ src/youtube_note_pipeline/summary_profiles/
 ## ライセンス
 
 [MIT License](LICENSE)
+
+### YAML の表記
+
+日時・日付はダブルクォート、Windows パスはシングルクォートで囲みます。URL スキーム付きの値はパスの規約から除外します。生成日時は `created`、更新日時は `updated` です。旧 `date` は読み込み時に `created` として扱います。既存日時のオフセットと小数秒は保持します。

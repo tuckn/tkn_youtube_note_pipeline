@@ -1,7 +1,7 @@
 ---
 type: summary-template
 id: 682b27ed-e542-4795-b295-107dbebe82f4
-version: "1.1"
+version: "1.4"
 noteSchemaVersion: "5.0"
 requiredHeadings:
   - "## 1. Summary"
@@ -33,8 +33,8 @@ templateId: {{ template.resource_id }}
 templateVersion: {{ template.version | yaml_quote }}
 templateSha256: {{ template.sha256 | yaml_quote }}
 reviewStatus: unreviewed
-date: {{ created }}
-updated: {{ updated }}
+created: {{ created | yaml_quote }}
+updated: {{ updated | yaml_quote }}
 noteId: {{ note_id }}
 ---
 

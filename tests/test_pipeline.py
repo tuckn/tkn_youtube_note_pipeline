@@ -186,8 +186,8 @@ def test_full_synthetic_pipeline_and_idempotency(
     assert summary_text.index("promptSha256:") < summary_text.index("outputSchemaId:")
     assert summary_text.index("outputSchemaId:") < summary_text.index("templateId:")
     assert summary_text.index("templateId:") < summary_text.index("reviewStatus:")
-    assert summary_text.index("reviewStatus:") < summary_text.index("date:")
-    assert summary_text.index("date:") < summary_text.index("updated:")
+    assert summary_text.index("reviewStatus:") < summary_text.index("created:")
+    assert summary_text.index("created:") < summary_text.index("updated:")
     assert summary_text.index("updated:") < summary_text.index("noteId:")
     success_messages = [
         record.getMessage() for record in caplog.records if record.levelno == SUCCESS
@@ -259,8 +259,8 @@ def test_changed_caption_is_a_source_collision(tmp_path: Path) -> None:
     source_text = source.path.read_text(encoding="utf-8")
     source.path.write_text(
         "\n".join(
-            "date: 2001-02-03T04:05:06+00:00"
-            if line.startswith("date: ")
+            "created: 2001-02-03T04:05:06+00:00"
+            if line.startswith("created: ")
             else "updated: 2001-02-03T04:05:06+00:00"
             if line.startswith("updated: ")
             else line
@@ -288,7 +288,7 @@ def test_changed_caption_is_a_source_collision(tmp_path: Path) -> None:
     assert replaced.status == "updated"
     assert "変更された論点です。" in replaced.path.read_text(encoding="utf-8")
     assert replaced_metadata["noteId"] == initial_metadata["noteId"]
-    assert replaced_metadata["date"] == initial_metadata["date"]
+    assert replaced_metadata["created"] == initial_metadata["created"]
     assert replaced_metadata["updated"] > initial_metadata["updated"]
     assert validate_source(replaced.path) == []
 
@@ -534,7 +534,7 @@ def test_prompt_version_change_updates_same_summary_and_preserves_note_identity(
     assert updated.details["previous_prompt_version"] == "1.0"
     assert updated_metadata["promptVersion"] == "2.0"
     assert updated_metadata["noteId"] == first_metadata["noteId"]
-    assert updated_metadata["date"] == first_metadata["date"]
+    assert updated_metadata["created"] == first_metadata["created"]
     assert updated_metadata["updated"] >= first_metadata["updated"]
     assert updated_metadata["reviewStatus"] == "unreviewed"
     assert "更新したpromptで" in updated_body
@@ -560,7 +560,7 @@ def test_prompt_hash_change_requires_explicit_overwrite(tmp_path: Path) -> None:
     assert updated.status == "updated"
     assert updated_metadata["promptSha256"] == "2" * 64
     assert updated_metadata["noteId"] == initial_metadata["noteId"]
-    assert updated_metadata["date"] == initial_metadata["date"]
+    assert updated_metadata["created"] == initial_metadata["created"]
     assert validate_summary(updated.path, tmp_path / "source") == []
 
 
