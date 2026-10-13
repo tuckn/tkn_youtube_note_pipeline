@@ -41,14 +41,19 @@ def patch_metadata(payload: bytes, changes: dict[str, Any]) -> bytes:
         raise ValueError("missing Frontmatter delimiter")
     frontmatter, rest = text[:boundary], text[boundary:]
     for key, value in changes.items():
-        scalar = yaml_quote(value) if isinstance(value, str) else json.dumps(value)
+        scalar = (
+            yaml_quote(value) if isinstance(value, str) else json.dumps(value, ensure_ascii=False)
+        )
         line = f"{key}: {scalar}"
         pattern = rf"(?m)^{re.escape(key)}:[^\r\n]*"
         if re.search(pattern, frontmatter):
             frontmatter = re.sub(pattern, line.replace("\\", "\\\\"), frontmatter)
         else:
             # Keep created / updated / noteId as the final three properties.
-            marker = newline + ("created:" if newline + "created:" in frontmatter else "date:")
+            if key == "author" and newline + "cliptool:" in frontmatter:
+                marker = newline + "cliptool:"
+            else:
+                marker = newline + ("created:" if newline + "created:" in frontmatter else "date:")
             if marker not in frontmatter:
                 raise ValueError("cannot insert metadata without a created/date field")
             frontmatter = frontmatter.replace(marker, newline + line + marker, 1)
@@ -56,7 +61,9 @@ def patch_metadata(payload: bytes, changes: dict[str, Any]) -> bytes:
     return (b"\xef\xbb\xbf" if payload.startswith(b"\xef\xbb\xbf") else b"") + result
 
 
-def plan_migration(source_root: Path, summary_root: Path) -> dict[str, Any]:
+def plan_migration(
+    source_root: Path, summary_root: Path, *, authors_only: bool = False
+) -> dict[str, Any]:
     source_root = source_root.absolute()
     summary_root = summary_root.absolute()
     if not source_root.is_dir() or not summary_root.is_dir():
@@ -65,6 +72,8 @@ def plan_migration(source_root: Path, summary_root: Path) -> dict[str, Any]:
     source_ids: Counter[str] = Counter()
     warnings: list[dict[str, str]] = []
     for path in sorted(source_root.rglob("*.md")):
+        if ".local" in path.relative_to(source_root).parts:
+            continue
         try:
             path.resolve().relative_to(source_root.resolve())
             payload = path.read_bytes()
@@ -78,6 +87,8 @@ def plan_migration(source_root: Path, summary_root: Path) -> dict[str, Any]:
             warnings.append({"path": str(path), "error": str(exc)})
     items: list[dict[str, Any]] = []
     for path in sorted(summary_root.rglob("*.md")):
+        if ".local" in path.relative_to(summary_root).parts:
+            continue
         item: dict[str, Any] = {"path": str(path), "status": "unchanged", "changes": {}}
         items.append(item)
         try:
@@ -90,7 +101,7 @@ def plan_migration(source_root: Path, summary_root: Path) -> dict[str, Any]:
                 continue
             uri = str(metadata.get("source") or "")
             if not uri:
-                item.update(status="skipped", reason="no source reference to repair")
+                item.update(status="skipped", reason="no source reference")
                 continue
             video_id, canonical_url = canonical_video_url(str(metadata.get("url") or ""))
             item["url"] = canonical_url
@@ -118,15 +129,33 @@ def plan_migration(source_root: Path, summary_root: Path) -> dict[str, Any]:
             except FileNotFoundError:
                 old_is_current = False
             changes: dict[str, Any] = {}
-            if not old_is_current:
-                changes["source"] = path_to_file_uri(source_path)
-                changes["sourceNoteId"] = source_id
-            legacy_version = str(metadata.get("schemaVersion"))
-            if metadata.get("type") == "summary" and legacy_version in ("1.0", "2.0"):
-                changes["schemaVersion"] = "1.1" if legacy_version == "1.0" else "3.0"
+            if authors_only:
+                author = source_metadata.get("author")
+                valid_author = (isinstance(author, str) and bool(author.strip())) or (
+                    isinstance(author, list)
+                    and bool(author)
+                    and all(isinstance(value, str) and value.strip() for value in author)
+                )
+                if not valid_author:
+                    raise ValueError("source author is missing, empty, or invalid")
+                existing_author = metadata.get("author")
+                if existing_author == author:
+                    continue
+                if existing_author not in (None, "", []):
+                    raise ValueError("existing author conflicts with the source; preserved")
+                changes["author"] = author
+            else:
+                if not old_is_current:
+                    changes["source"] = path_to_file_uri(source_path)
+                    changes["sourceNoteId"] = source_id
+                legacy_version = str(metadata.get("schemaVersion"))
+                if metadata.get("type") == "summary" and legacy_version in ("1.0", "2.0"):
+                    changes["schemaVersion"] = "1.1" if legacy_version == "1.0" else "3.0"
             if not changes:
                 continue
             updated = patch_metadata(payload, changes)
+            if _metadata(updated) != {**metadata, **changes}:
+                raise ValueError("metadata patch would change unrelated values")
             if "schemaVersion" in changes:
                 errors = validate_summary(path, source_root, text=updated.decode("utf-8-sig"))
                 if errors:
@@ -146,6 +175,7 @@ def plan_migration(source_root: Path, summary_root: Path) -> dict[str, Any]:
             item.update(status="blocked", reason=str(exc))
     return {
         "schema_version": "1.0",
+        "scope": "authors" if authors_only else "references",
         "source_root": str(source_root),
         "summary_root": str(summary_root),
         "counts": dict(Counter(item["status"] for item in items)),
@@ -154,10 +184,13 @@ def plan_migration(source_root: Path, summary_root: Path) -> dict[str, Any]:
     }
 
 
-def apply_migration(plan: dict[str, Any], reports_root: Path) -> dict[str, Any]:
+def apply_migration(
+    plan: dict[str, Any], reports_root: Path, *, backup_root: Path | None = None
+) -> dict[str, Any]:
     """Recompute the plan and verify all approved bytes before any persistent write."""
     if (
         plan.get("schema_version") != "1.0"
+        or plan.get("scope", "references") not in ("authors", "references")
         or not all(isinstance(plan.get(key), str) for key in ("source_root", "summary_root"))
         or not isinstance(plan.get("items"), list)
         or not all(
@@ -172,7 +205,7 @@ def apply_migration(plan: dict[str, Any], reports_root: Path) -> dict[str, Any]:
     if len(paths) != len(set(paths)):
         raise ValueError("migration plan contains duplicate paths")
     source_root, summary_root = Path(plan["source_root"]), Path(plan["summary_root"])
-    fresh = plan_migration(source_root, summary_root)
+    fresh = plan_migration(source_root, summary_root, authors_only=plan.get("scope") == "authors")
     fresh_by_path = {item["path"]: item for item in fresh["items"]}
     selected = [item for item in plan["items"] if item["status"] == "planned"]
     for item in selected:
@@ -189,7 +222,8 @@ def apply_migration(plan: dict[str, Any], reports_root: Path) -> dict[str, Any]:
     result: dict[str, Any] = {
         "status": "updated",
         "updated": 0,
-        "backup_root": str(run_root),
+        "backup_root": str(backup_root / run_root.name if backup_root else run_root),
+        "report_root": str(run_root),
         "counts": fresh["counts"],
         "files": [],
     }
@@ -205,7 +239,9 @@ def apply_migration(plan: dict[str, Any], reports_root: Path) -> dict[str, Any]:
             updated = patch_metadata(payload, item["changes"])
             if sha256_bytes(updated) != item["after_sha256"]:
                 raise ValueError("migration result differs from the reviewed plan")
-            backup = run_root / "backups" / f"{index:04d}.md"
+            backup = (
+                backup_root / run_root.name if backup_root else run_root / "backups"
+            ) / f"{index:04d}.md"
             atomic_write(backup, payload)
             atomic_write(path, updated, overwrite=True)
             result["files"].append({"path": str(path), "backup": str(backup)})

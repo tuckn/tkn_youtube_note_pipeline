@@ -1,7 +1,7 @@
 ---
 type: summary-template
 id: 682b27ed-e542-4795-b295-107dbebe82f4
-version: "1.4"
+version: "1.6"
 noteSchemaVersion: "5.0"
 requiredHeadings:
   - "## 1. Summary"
@@ -20,6 +20,16 @@ title: {{ video.title | yaml_quote }}
 description: {{ document.conclusion | compact_description | yaml_quote }}
 cover: {{ cover }}
 url: {{ video.canonical_url }}
+{% if video.author is string %}
+author: {{ video.author | yaml_quote }}
+{% elif video.author %}
+author:
+{% for author in video.author %}
+  - {{ author | yaml_quote }}
+{% endfor %}
+{% else %}
+author: null
+{% endif %}
 cliptool: Codex
 source: {{ source_uri | yaml_quote }}
 generator: {{ generator | yaml_quote }}

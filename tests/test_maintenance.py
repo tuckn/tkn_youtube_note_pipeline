@@ -205,6 +205,7 @@ def test_all_mutation_previews_are_read_only(setup_notes, tmp_path, monkeypatch,
         ["build-source", str(manifest), "--force"],
         ["build-summary", str(source), "--force"],
         ["migrate-notes"],
+        ["migrate-notes", "--authors-only"],
     ]
     for command in commands:
         assert cli.main([*command, "--config", str(config_path), "--dry-run", "--quiet"]) == 0

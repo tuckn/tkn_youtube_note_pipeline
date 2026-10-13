@@ -166,6 +166,13 @@ def build_parser() -> argparse.ArgumentParser:
     migrate_parser.add_argument(
         "--apply-plan", type=Path, help="apply a previously reviewed dry-run JSON plan"
     )
+    migrate_parser.add_argument(
+        "--authors-only", action="store_true",
+        help="copy missing author metadata from matching sources; preserve text and provenance",
+    )
+    migrate_parser.add_argument(
+        "--backup-root", type=Path, help="store original notes separately from migration reports",
+    )
     _common(migrate_parser)
 
     config_parser = subparsers.add_parser("config", help="configuration operations")
@@ -248,17 +255,23 @@ def main(argv: list[str] | None = None) -> int:
         config = resolved.config
         logger.debug("Configuration sources: %s", ", ".join(resolved.sources))
         if args.command == "migrate-notes":
-            plan = plan_migration(config.source_root, config.summary_root)
+            plan = plan_migration(
+                config.source_root, config.summary_root, authors_only=args.authors_only
+            )
             if args.apply_plan:
                 approved = json.loads(args.apply_plan.read_text(encoding="utf-8-sig"))
                 if not isinstance(approved, dict):
                     raise ValueError("migration plan must be a JSON object")
                 if any(approved.get(key) != plan[key] for key in ("source_root", "summary_root")):
                     raise ValueError("migration plan roots do not match resolved configuration")
+                if approved.get("scope", "references") != plan["scope"]:
+                    raise ValueError("migration plan scope does not match --authors-only")
                 if args.dry_run:
                     raise ValueError("--apply-plan and --dry-run cannot be combined")
                 plan = approved
-            result = plan if args.dry_run else apply_migration(plan, config.reports_root)
+            result = plan if args.dry_run else apply_migration(
+                plan, config.reports_root, backup_root=args.backup_root
+            )
             print(json.dumps(result, ensure_ascii=False, indent=2))
             return 1 if result["counts"].get("blocked", 0) else 0
         if getattr(args, "dry_run", False):

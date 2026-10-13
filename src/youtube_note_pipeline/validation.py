@@ -324,12 +324,17 @@ def validate_summary(
         "site",
         "domain",
         "favicon",
-        "author",
         "published",
         "transcript",
     ):
         if key in metadata:
             errors.append(f"{key} belongs on the source note, not the summary")
+    author = metadata.get("author")
+    if author is not None and not (
+        isinstance(author, str)
+        or (isinstance(author, list) and all(isinstance(value, str) for value in author))
+    ):
+        errors.append("author must be a string, a list of strings, or null")
     if is_prior_schema:
         if metadata.get("nouns") != []:
             errors.append("nouns must default to [] for schemaVersion 1.0 or 2.0")

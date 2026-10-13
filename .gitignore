@@ -9,3 +9,4 @@ __pycache__/
 tkn-youtube-note/
 .tkn/*
 !.tkn/config.example.yaml
+/.local/
