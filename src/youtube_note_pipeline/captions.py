@@ -25,6 +25,10 @@ def _language_match(candidate: str, preferred: str) -> bool:
     return candidate == preferred or candidate.split("-")[0] == preferred.split("-")[0]
 
 
+def _is_translated(track: dict[str, Any]) -> bool:
+    return "tlang" in parse_qs(urlsplit(str(track["url"])).query, keep_blank_values=True)
+
+
 def select_caption(
     info: dict[str, Any], fallback_languages: list[str]
 ) -> tuple[CaptionSelection, dict[str, Any]] | None:
@@ -37,6 +41,7 @@ def select_caption(
         language: str,
         source_kind: str,
         selection_kind: str,
+        untranslated_only: bool = False,
     ) -> tuple[CaptionSelection, dict[str, Any]] | None:
         candidates: list[tuple[str, dict[str, Any]]] = []
         for code, formats in tracks.items():
@@ -44,6 +49,8 @@ def select_caption(
                 continue
             for track in formats or []:
                 if track.get("ext") == "json3" and track.get("url"):
+                    if untranslated_only and _is_translated(track):
+                        continue
                     candidates.append((str(code), track))
         if not candidates:
             return None
@@ -52,9 +59,7 @@ def select_caption(
         # A tlang parameter requests translation; preserve source order for ties.
         code, selected = min(
             candidates,
-            key=lambda candidate: "tlang" in parse_qs(
-                urlsplit(str(candidate[1]["url"])).query, keep_blank_values=True,
-            ),
+            key=lambda candidate: _is_translated(candidate[1]),
         )
         selection = CaptionSelection(
             language=code,
@@ -62,6 +67,30 @@ def select_caption(
             source_kind=source_kind,  # type: ignore[arg-type]
         )
         return selection, dict(selected)
+
+    # Metadata can describe a dubbed audio language. Prefer real caption tracks
+    # in that language, then usable yt-dlp original-language markers, before any
+    # translated metadata-language track. Never infer an original from any random
+    # untranslated subtitle: it could be a manually supplied translation.
+    original_languages = [original] if original else []
+    for code, formats in automatic.items():
+        code = str(code)
+        if code.endswith("-orig") and any(
+            track.get("ext") == "json3" and track.get("url") and not _is_translated(track)
+            for track in formats or []
+        ):
+            language = code.removesuffix("-orig")
+            if language and language not in original_languages:
+                original_languages.append(language)
+    for language in original_languages:
+        result = find(manual, language, "subtitles", "manual", untranslated_only=True)
+        if result:
+            return result
+        result = find(
+            automatic, language, "automatic_captions", "automatic", untranslated_only=True,
+        )
+        if result:
+            return result
 
     if original:
         result = find(manual, original, "subtitles", "manual")

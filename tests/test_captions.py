@@ -71,14 +71,14 @@ def test_fallback_language_also_prefers_untranslated_caption() -> None:
     original = {"ext": "json3", "url": "https://example.invalid/captions?lang=en-US"}
     info = {
         "language": "ja",
-        "automatic_captions": {"en": [translated], "en-US-orig": [original]},
+        "automatic_captions": {"en": [translated], "en-US": [original]},
     }
     selected = select_caption(info, ["en"])
     assert selected is not None
     selection, track = selected
     assert track == original
     assert selection.kind == "fallback"
-    assert selection.language == "en-US-orig"
+    assert selection.language == "en-US"
 
 
 @pytest.mark.parametrize("fallback", [False, True])
@@ -100,7 +100,7 @@ def test_original_preference_does_not_select_an_unrequested_language() -> None:
     english = {"ext": "json3", "url": "https://example.invalid/captions?lang=en"}
     info = {
         "language": "ja",
-        "automatic_captions": {"en-orig": [english], "ja": [translated]},
+        "automatic_captions": {"en": [english], "ja": [translated]},
     }
     selected = select_caption(info, ["en"])
     assert selected is not None
@@ -123,6 +123,59 @@ def test_caption_selection_skips_unusable_original_formats() -> None:
     selected = select_caption(info, [])
     assert selected is not None
     assert selected[1] == translated
+
+
+@pytest.mark.parametrize("metadata_language", ["en-US", None])
+@pytest.mark.parametrize("manual", [False, True])
+def test_original_marker_overrides_translated_or_missing_metadata_language(
+    metadata_language, manual,
+) -> None:
+    original = {"ext": "json3", "url": "https://example.invalid/captions?lang=ja"}
+    translated = {"ext": "json3", "url": "https://example.invalid/captions?lang=ja&tlang=en"}
+    info = {
+        "language": metadata_language,
+        "automatic_captions": {"en": [translated], "ja-orig": [original]},
+        "subtitles": {"ja": [original]} if manual else {},
+    }
+    before = deepcopy(info)
+    selection, track = select_caption(info, [])
+    assert track == original
+    assert selection.language == ("ja" if manual else "ja-orig")
+    assert selection.kind == ("manual" if manual else "automatic")
+    assert info == before
+
+
+def test_metadata_language_native_track_precedes_other_original_markers() -> None:
+    japanese = {"ext": "json3", "url": "https://example.invalid/captions?lang=ja"}
+    english = {"ext": "json3", "url": "https://example.invalid/captions?lang=en-US"}
+    info = {
+        "language": "en-US",
+        "automatic_captions": {"ja-orig": [japanese], "en-US-orig": [english]},
+    }
+    selection, track = select_caption(info, [])
+    assert track == english
+    assert selection.language == "en-US-orig"
+
+
+@pytest.mark.parametrize("bad_track", [
+    {"ext": "json3"},
+    {"ext": "vtt", "url": "https://example.invalid/captions?lang=ja"},
+    {"ext": "json3", "url": "https://example.invalid/captions?lang=en&tlang=ja"},
+])
+def test_unusable_original_marker_does_not_change_language_selection(bad_track) -> None:
+    translated = {"ext": "json3", "url": "https://example.invalid/captions?lang=ja&tlang=en"}
+    info = {
+        "language": "en",
+        "automatic_captions": {"ja-orig": [bad_track], "en": [translated]},
+    }
+    assert select_caption(info, [])[1] == translated
+
+
+def test_multiple_original_markers_without_metadata_preserve_source_order() -> None:
+    japanese = {"ext": "json3", "url": "https://example.invalid/captions?lang=ja"}
+    english = {"ext": "json3", "url": "https://example.invalid/captions?lang=en"}
+    info = {"automatic_captions": {"ja-orig": [japanese], "en-orig": [english]}}
+    assert select_caption(info, [])[1] == japanese
 
 
 def test_equal_priority_captions_keep_source_order() -> None:

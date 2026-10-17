@@ -101,6 +101,21 @@ def test_acquire_downloads_original_instead_of_translated_caption(tmp_path, down
     assert downloader.calls[0][1]["url"] == original["url"]
 
 
+def test_acquire_uses_original_marker_when_metadata_language_differs(tmp_path, downloader):
+    original = downloader.info["automatic_captions"]["ja"][0]
+    original["url"] = "https://example.com/captions?lang=ja"
+    translated = {**original, "url": "https://example.com/captions?lang=ja&tlang=en"}
+    downloader.info["language"] = "en-US"
+    downloader.info["automatic_captions"] = {"en": [translated], "ja-orig": [original]}
+    manifest_path = acquire(URL, tmp_path, [])
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert manifest["status"] == "success"
+    assert manifest["caption"]["language"] == "ja-orig"
+    assert manifest["video"]["original_language"] == "en-US"
+    assert len(downloader.calls) == 1
+    assert downloader.calls[0][1]["url"] == original["url"]
+
+
 def test_caption_429_preserves_metadata_without_retries(tmp_path, downloader):
     downloader.download_error = DownloadError("HTTP Error 429: Too Many Requests")
     manifest_path = acquire(URL, tmp_path, [])
