@@ -114,7 +114,7 @@ def test_list_command_prints_json_inventory(
         lambda args: SimpleNamespace(config=config, sources=[]),
     )
 
-    assert main(["list", "--quiet"]) == 0
+    assert main(["list", "--json", "--quiet"]) == 0
     payload = json.loads(capsys.readouterr().out)
     assert payload["count"] == 1
     assert payload["items"][0]["video_id"] == "TESTVID0001"

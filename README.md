@@ -96,7 +96,7 @@ tkn-youtube-note ingest "https://www.youtube.com/watch?v=<video-id>" --dry-run
 tkn-youtube-note ingest "https://www.youtube.com/watch?v=<video-id>"
 ```
 
-最後に表示される JSON の `path` が要約ノートの場所です。
+最後に表示される一覧の `path` が要約ノートの場所です。
 既定の保存先は `~/.tkn/youtube_note_pipeline/data/` 以下です（`~` はユーザーのホームフォルダ）。
 
 > [!IMPORTANT]
@@ -126,7 +126,7 @@ tkn-youtube-note --version
 tkn-youtube-note config init
 ```
 
-`~/.tkn/youtube_note_pipeline/config.yaml` が作成され、その絶対パスが JSON で表示されます。
+`~/.tkn/youtube_note_pipeline/config.yaml` が作成され、その絶対パスが `path=...` と表示されます。
 すでに同じ内容のファイルがあれば `unchanged`、編集済みのファイルがあれば上書きせずにエラーで停止します（手元の編集は保護されます）。
 
 ### 生成AIの接続先を設定する
@@ -232,7 +232,7 @@ tkn-youtube-note ingest "<video-url>" --dry-run
 ```
 
 `--dry-run` は設定と入力を検証し、実行計画を表示するだけです。YouTube への通信、生成AIの呼び出し、ファイル作成は行いません。
-`status: "planned"` と表示されれば計画は正常です。
+`status=planned` と表示されれば計画は正常です。
 
 ただし、字幕の有無や生成AIの認証は実際に通信するまで分からないため、dry-run の成功は本番の成功を保証しません。
 
@@ -243,14 +243,14 @@ tkn-youtube-note ingest "<video-url>"
 ```
 
 取得 → 文字起こし → 要約を続けて実行します。個別のコマンド（`acquire` など）を先に実行する必要はありません。
-成功すると `[SUCCESS]` が表示され、最後に次のような JSON が出力されます。
+成功すると標準エラーに `[SUCCESS]` が表示され、標準出力に次のような一覧が出ます（主な項目）。
 
-```json
-{
-  "status": "created",
-  "path": "C:\\path\\to\\vault\\YouTube\\2026\\20260901_バックアップの基本_70a1a332.md",
-  "report": "C:\\path\\to\\reports\\20260925T120000+0900_abcd1234.json"
-}
+```text
+status=created
+path=C:\path\to\vault\YouTube\2026\20260901_バックアップの基本_70a1a332.md
+report=C:\path\to\reports\20260925T120000+0900_abcd1234.json
+counts.created=3
+outcome=success
 ```
 
 | キー     | 意味                                               |
@@ -344,6 +344,8 @@ tkn-youtube-note build-summary "<source-note>" --force             # 生成AIを
 
 | オプション                                                            | 内容                                                         |
 | --------------------------------------------------------------------- | ------------------------------------------------------------ |
+| `--json` | 最終結果を一覧の代わりに JSON で表示 |
+| `--full-output` | 移行の変更なし・対象外を含む全明細を表示（形式とは独立） |
 | `--dry-run`                                                           | 書き込み・通信・生成AI呼び出しをせず、計画だけを表示         |
 | `--config <file>`                                                     | 追加で読み込む設定ファイル                                   |
 | `--raw-root` / `--source-root` / `--summary-root` / `--reports-root`  | 保存先をその実行だけ変更                                     |
@@ -363,8 +365,37 @@ tkn-youtube-note build-summary "<source-note>" --force             # 生成AIを
 
 ### 出力と終了コード
 
-進捗ログは**標準エラー**、最終結果は**標準出力**に出ます。`config list` の既定表示は `key=value`、
-`config list --json` とその他のコマンドは JSON です。そのため JSON だけをパイプで他の処理へ渡せます（エラー時は標準エラーだけを出して終了する場合があります）。
+すべてのコマンドの最終結果は**標準出力**へ、既定では1行1項目の `key=value` で出します。
+`--json` を指定すると、同じ結果を1つの妥当な JSON document として出します。
+進捗・警告・診断は**標準エラー**へ分離します。引数・設定・実行時エラーや中断も、可能な限り選択した形式で結果を返します。
+`--help` と `--version` は通常の案内を表示します。
+
+`--json`・`--full-output`・`--quiet`・`--verbose` はコマンドの前後に指定できます。
+多段コマンドでは `tkn-youtube-note --json config list`、`config --json list`、`config list --json` が同じ形式になります。
+TTY・パイプ・リダイレクトによる形式の自動切替はありません。quiet/verbose はログ量だけを変え、最終結果を抑制しません。
+
+人向けにはそのまま実行し、自動処理では `--json` を明示します。
+
+```shell
+tkn-youtube-note validate "<source-note>"
+tkn-youtube-note validate "<source-note>" --json
+```
+
+PowerShell で結果を解析する例です。失敗時も JSON を読み取ったうえで終了コードを確認します。
+
+```powershell
+$result = tkn-youtube-note --json validate "<source-note>" | ConvertFrom-Json
+$code = $LASTEXITCODE
+$result.path
+$result.errors
+if ($code -ne 0) { throw "Validation failed (exit $code)" }
+```
+
+`status` は作成・更新など既存の処理状態、`outcome` はコマンド全体の `success` / `failed` / `partial_failure` です。
+件数は `counts`、処理の各段階は `stages`、エラー理由は `error` / `errors` / `reason`、対象は `path` / `targets` で確認できます。
+`migrate-notes` は既定で `unchanged` / `skipped` の明細を件数へまとめ、`--full-output` で全件を表示します。
+失敗・要確認の明細は省略しません。動画を探す `list` は全件を表示します。
+詳細なキー・型・コマンド別の契約は [CLI 出力仕様](docs/cli-output.md) を参照してください。
 
 | ログ        | 意味                                                             |
 | ----------- | ---------------------------------------------------------------- |
@@ -386,6 +417,7 @@ tkn-youtube-note build-summary "<source-note>" --force             # 生成AIを
 | ---------- | ---------------------------------------------------------------------- |
 | `0`        | 正常終了                                                               |
 | `1`        | 処理・検証の失敗、`require_force`、`migrate-notes` で `blocked` が残った |
+| `130`      | 中断（既に完了した書き込みは自動で戻しません） |
 | `2`        | コマンドの引数エラー                                                   |
 
 ## 設定リファレンス
@@ -761,13 +793,13 @@ author: "Example Channel"
 既存の要約には、次の操作で不足する `author` だけを補えます。YouTube への再取得や生成AIによる再要約は行いません。
 
 ```shell
-tkn-youtube-note migrate-notes --authors-only --dry-run
+tkn-youtube-note migrate-notes --authors-only --dry-run --json --full-output
 ```
 
-表示された JSON を UTF-8 の `author-plan.json` として保存し、`planned` の変更内容を確認してから適用します。
+表示された JSON を `.local/data/<datetime_work-id>/author-plan.json` へ UTF-8 で保存し、`planned` の変更内容を確認してから適用します。
 
 ```shell
-tkn-youtube-note migrate-notes --authors-only --apply-plan author-plan.json --backup-root .local/data/20261013T090000_summary-authors --reports-root .local/state/20261013T090000_summary-authors
+tkn-youtube-note migrate-notes --authors-only --apply-plan ".local/data/<datetime_work-id>/author-plan.json" --backup-root .local/data/20261013T090000_summary-authors --reports-root .local/state/20261013T090000_summary-authors
 ```
 
 - `source_root` と `summary_root` 内で、動画 URL とノート ID・参照先を照合します。`.local` 配下のバックアップは走査しません。
@@ -786,15 +818,15 @@ tkn-youtube-note migrate-notes --authors-only --apply-plan author-plan.json --ba
 1. 計画を表示します。
 
    ```shell
-   tkn-youtube-note migrate-notes --dry-run
+   tkn-youtube-note migrate-notes --dry-run --json --full-output
    ```
 
-2. 表示された JSON 全体を、UTF-8 の `migration-plan.json` として作業フォルダに保存します（進捗メッセージは含めない）。
+2. `<datetime_work-id>` は作業開始時の日時と短い作業名に置き換えます。表示された JSON 全体を、UTF-8 の `.local/data/<datetime_work-id>/migration-plan.json` として保存します（進捗メッセージは含めない）。
 3. 各項目の状態を確認します。`planned` は変更対象、`blocked` は候補が曖昧・矛盾しているため適用できない項目、`skipped` は対象外です。
 4. 確認した計画を適用します。
 
    ```shell
-   tkn-youtube-note migrate-notes --apply-plan migration-plan.json
+   tkn-youtube-note migrate-notes --apply-plan ".local/data/<datetime_work-id>/migration-plan.json"
    ```
 
 | 修復対象                                 | 変更内容                                                                                             |
@@ -860,6 +892,8 @@ src/youtube_note_pipeline/summary_profiles/
 - 過去の要約ノートの検証規則は [summary_contracts.json](src/youtube_note_pipeline/resources/summary_contracts.json) に保持しています。新しい形式を追加するときは、既存の規則を書き換えずに追記してください。
 
 ## 関連資料
+
+- [CLI 出力仕様](docs/cli-output.md)
 
 - [設定例（config.example.yaml）](src/youtube_note_pipeline/resources/config.example.yaml)
 - 要約の生成指示：[日本語](src/youtube_note_pipeline/summary_profiles/default-ja/prompt.md) ／ [英語](src/youtube_note_pipeline/summary_profiles/default-en/prompt.md)

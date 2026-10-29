@@ -208,13 +208,15 @@ def test_all_mutation_previews_are_read_only(setup_notes, tmp_path, monkeypatch,
         ["migrate-notes", "--authors-only"],
     ]
     for command in commands:
-        assert cli.main([*command, "--config", str(config_path), "--dry-run", "--quiet"]) == 0
+        assert cli.main([
+            "--json", *command, "--config", str(config_path), "--dry-run", "--quiet",
+        ]) == 0
         json.loads(capsys.readouterr().out)
         assert before == {p: p.read_bytes() for p in tmp_path.rglob("*") if p.is_file()}
         assert not config.reports_root.exists()
     target = tmp_path / "new-user" / "config.yaml"
     monkeypatch.setattr("youtube_note_pipeline.config.global_config_path", lambda: target)
-    assert cli.main(["config", "init", "--dry-run", "--quiet"]) == 0
+    assert cli.main(["--json", "config", "init", "--dry-run", "--quiet"]) == 0
     assert json.loads(capsys.readouterr().out)["status"] == "planned"
     assert not target.parent.exists()
 
@@ -256,7 +258,7 @@ def test_status_reports_validity_and_currency_separately(setup_notes, monkeypatc
             prompt=replace(provider.profile.prompt, version="future"),
         ),
     )
-    assert cli.main(["status", str(summary), "--quiet"]) == 0
+    assert cli.main(["--json", "status", str(summary), "--quiet"]) == 0
     result = json.loads(capsys.readouterr().out)
     assert result["valid"] is True
     assert result["currency"]["is_current"] is False

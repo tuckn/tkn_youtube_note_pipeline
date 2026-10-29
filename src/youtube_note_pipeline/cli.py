@@ -6,23 +6,29 @@ import argparse
 import json
 import logging
 import sys
+from collections import Counter
 from pathlib import Path
-from typing import Any
+from typing import Any, NoReturn
+
+import yaml
+from pydantic import ValidationError
 
 from youtube_note_pipeline import __version__
+from youtube_note_pipeline import config as configuration
 from youtube_note_pipeline.config import (
     PipelineConfig,
     initialize_user_config,
     public_config,
     resolve_config,
 )
-from youtube_note_pipeline.config_display import config_lines
 from youtube_note_pipeline.console_logging import ColorFormatter, log_success, supports_color
 from youtube_note_pipeline.contracts import summary_currency
 from youtube_note_pipeline.inventory import build_inventory
 from youtube_note_pipeline.migration import apply_migration, plan_migration
 from youtube_note_pipeline.notes import split_note
+from youtube_note_pipeline.output import emit, public_result
 from youtube_note_pipeline.pipeline import (
+    StageResult,
     build_source,
     build_summary,
     ingest,
@@ -39,6 +45,35 @@ from youtube_note_pipeline.summary_resources import (
 from youtube_note_pipeline.validation import validate_path
 
 logger = logging.getLogger(__name__)
+
+
+class ArgumentFailure(SystemExit):
+    """Keep argparse's exit code while letting main render a structured result."""
+
+    def __init__(self, message: str) -> None:
+        super().__init__(2)
+        self.message = message
+
+
+class Parser(argparse.ArgumentParser):
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        kwargs.setdefault("allow_abbrev", False)
+        super().__init__(*args, **kwargs)
+
+    def error(self, message: str) -> NoReturn:
+        raise ArgumentFailure(message)
+
+
+def _result_options(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--json", action="store_true", default=argparse.SUPPRESS,
+        help="print one machine-readable JSON result instead of key=value lines",
+    )
+    parser.add_argument(
+        "--full-output", action="store_true", default=argparse.SUPPRESS,
+        help="include unchanged/skipped migration rows in either output format",
+    )
+    _verbosity(parser)
 
 
 def _configure_console_encoding() -> None:
@@ -62,7 +97,7 @@ def _common(parser: argparse.ArgumentParser) -> None:
         help="override the Bridge timeout (seconds, greater than 0 and at most 86400)",
     )
     parser.add_argument("--summary-profile", choices=BUILT_IN_SUMMARY_PROFILES)
-    _verbosity(parser)
+    _result_options(parser)
 
 
 def _verbosity(parser: argparse.ArgumentParser) -> None:
@@ -71,12 +106,14 @@ def _verbosity(parser: argparse.ArgumentParser) -> None:
         "-q",
         "--quiet",
         action="store_true",
+        default=argparse.SUPPRESS,
         help="suppress progress logs; errors are still shown",
     )
     verbosity.add_argument(
         "-v",
         "--verbose",
         action="store_true",
+        default=argparse.SUPPRESS,
         help="show detailed diagnostic logs",
     )
 
@@ -86,7 +123,7 @@ def _inventory_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--raw-root", type=Path)
     parser.add_argument("--source-root", type=Path)
     parser.add_argument("--summary-root", type=Path)
-    _verbosity(parser)
+    _result_options(parser)
 
 
 def _configure_logging(args: argparse.Namespace) -> None:
@@ -106,7 +143,15 @@ def _configure_logging(args: argparse.Namespace) -> None:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="tkn-youtube-note")
+    parser = Parser(
+        prog="tkn-youtube-note",
+        description="Results: key=value by default, --json for automation. Logs go to stderr.",
+        epilog=(
+            "Exit codes: 0 success; 1 processing/validation failure; 2 arguments; 130 interrupted."
+        ),
+    )
+    _result_options(parser)
+    parser.set_defaults(json=False, full_output=False, quiet=False, verbose=False)
     parser.add_argument(
         "--version", action="version", version=f"%(prog)s {__version__}"
     )
@@ -176,6 +221,7 @@ def build_parser() -> argparse.ArgumentParser:
     _common(migrate_parser)
 
     config_parser = subparsers.add_parser("config", help="configuration operations")
+    _result_options(config_parser)
     config_subparsers = config_parser.add_subparsers(dest="config_command", required=True)
     listing = config_subparsers.add_parser(
         "list",
@@ -183,12 +229,11 @@ def build_parser() -> argparse.ArgumentParser:
         description="Read settings without writing files or invoking AI; print key=value lines.",
     )
     _common(listing)
-    listing.add_argument("--json", action="store_true", help="print the full result as JSON")
     config_init = config_subparsers.add_parser(
         "init",
         help="create the user-global configuration without overwriting edits",
     )
-    _verbosity(config_init)
+    _result_options(config_init)
 
     for mutating in (
         ingest_parser,
@@ -226,31 +271,92 @@ def _resolved(args: argparse.Namespace) -> Any:
     return resolve_config(explicit_config=getattr(args, "config", None), overrides=overrides)
 
 
-def _print_result(path: Path, status: str, report: Path | None = None) -> None:
-    payload = {"status": status, "path": str(path)}
-    if report:
-        payload["report"] = str(report)
-    print(json.dumps(payload, ensure_ascii=False, indent=2))
+def _result(args: argparse.Namespace, payload: dict[str, Any], exit_code: int = 0) -> int:
+    command = args.command or "arguments"
+    if command == "config":
+        command += " " + str(getattr(args, "config_command", ""))
+    emit(
+        public_result(
+            payload, command=command, exit_code=exit_code, full_output=args.full_output,
+        ),
+        json_output=args.json,
+    )
+    return exit_code
+
+
+def _stage_result(
+    args: argparse.Namespace, stages: list[StageResult], report: Path, exit_code: int = 0,
+) -> int:
+    return _result(args, {
+        "status": stages[-1].status, "path": str(stages[-1].path), "report": str(report),
+        "stages": [
+            {"path": str(stage.path), "status": stage.status, "details": stage.details}
+            for stage in stages
+        ],
+    }, exit_code)
+
+
+def _targets(args: argparse.Namespace, config: PipelineConfig | None) -> dict[str, str]:
+    targets = {
+        name: str(value)
+        for name in (
+            "path", "source_note", "manifest", "metadata", "captions", "apply_plan",
+            "backup_root", "config",
+        )
+        if (value := getattr(args, name, None)) is not None
+    }
+    if args.command == "config" and getattr(args, "config_command", "") == "init":
+        targets["config"] = str(configuration.global_config_path())
+    if config is not None:
+        for name in ("raw_root", "source_root", "summary_root", "reports_root"):
+            targets[name] = str(getattr(config, name))
+    else:
+        targets.setdefault("user_config", str(configuration.global_config_path()))
+        targets["cwd_config"] = str(Path.cwd() / ".tkn" / "config.yaml")
+    return targets
+
+
+def _error_message(exc: Exception) -> str:
+    cause: BaseException | None = exc
+    seen: set[int] = set()
+    while cause is not None and id(cause) not in seen:
+        seen.add(id(cause))
+        if isinstance(cause, ValidationError):
+            return "; ".join(
+                f"{'.'.join(str(part) for part in row['loc'])}: {row['msg']}"
+                for row in cause.errors(
+                    include_input=False, include_context=False, include_url=False,
+                )
+            )
+        if isinstance(cause, yaml.YAMLError):
+            mark = getattr(cause, "problem_mark", None)
+            location = f" at line {mark.line + 1}, column {mark.column + 1}" if mark else ""
+            return "invalid YAML configuration" + location
+        cause = cause.__cause__
+    return str(exc)
 
 
 def main(argv: list[str] | None = None) -> int:
     _configure_console_encoding()
-    args = build_parser().parse_args(argv)
+    tokens = list(sys.argv[1:] if argv is None else argv)
+    options = tokens[:tokens.index("--")] if "--" in tokens else tokens
+    args = argparse.Namespace(
+        command=None, json="--json" in options, full_output="--full-output" in options,
+        quiet="--quiet" in options or "-q" in options,
+        verbose="--verbose" in options or "-v" in options,
+    )
     _configure_logging(args)
-    logger.debug("Parsed command: %s", args.command)
     config: PipelineConfig | None = None
     try:
+        args = build_parser().parse_args(tokens)
+        if args.quiet and args.verbose:
+            raise ArgumentFailure("--quiet and --verbose cannot be combined")
+        _configure_logging(args)
+        logger.debug("Parsed command: %s", args.command)
         if args.command == "config" and args.config_command == "init":
             logger.info("Initializing user-global configuration")
             path, status = initialize_user_config(dry_run=args.dry_run)
-            print(
-                json.dumps(
-                    {"status": status, "path": str(path)},
-                    ensure_ascii=False,
-                    indent=2,
-                )
-            )
-            return 0
+            return _result(args, {"status": status, "path": str(path)})
         resolved = _resolved(args)
         config = resolved.config
         logger.debug("Configuration sources: %s", ", ".join(resolved.sources))
@@ -272,8 +378,12 @@ def main(argv: list[str] | None = None) -> int:
             result = plan if args.dry_run else apply_migration(
                 plan, config.reports_root, backup_root=args.backup_root
             )
-            print(json.dumps(result, ensure_ascii=False, indent=2))
-            return 1 if result["counts"].get("blocked", 0) else 0
+            if not args.dry_run:
+                # apply_migration's persisted report remains unchanged; expose blocked targets here.
+                result = dict(result)
+                result["attention"] = [row for row in plan["items"] if row["status"] == "blocked"]
+                result["warnings"] = plan["warnings"]
+            return _result(args, result, 1 if result["counts"].get("blocked", 0) else 0)
         if getattr(args, "dry_run", False):
             if args.command in ("ingest", "acquire"):
                 if args.command == "ingest":
@@ -311,19 +421,12 @@ def main(argv: list[str] | None = None) -> int:
                 )
             else:
                 raise ValueError("unsupported dry-run command")
-            print(
-                json.dumps(
-                    {
-                        "dry_run": True,
-                        "status": stage.status,
-                        "path": str(stage.path),
-                        "details": stage.details,
-                    },
-                    ensure_ascii=False,
-                    indent=2,
-                )
-            )
-            return 1 if stage.details.get("action") == "require_force" else 0
+            exit_code = 1 if stage.details.get("action") == "require_force" else 0
+            return _result(args, {
+                "dry_run": True, "status": stage.status, "path": str(stage.path),
+                "details": stage.details,
+                "counts": {"require_force" if exit_code else stage.status: 1},
+            }, exit_code)
         if args.command == "config":
             logger.info("Showing resolved configuration")
             profile = load_summary_profile(config.summary_profile)
@@ -365,11 +468,7 @@ def main(argv: list[str] | None = None) -> int:
                 "source_schema_versions": resolved.source_schema_versions,
                 "effective_schema_version": config.schema_version,
             }
-            if args.json:
-                print(json.dumps(config_payload, ensure_ascii=False, indent=2))
-            else:
-                print("\n".join(config_lines(config_payload)))
-            return 0
+            return _result(args, config_payload)
         if args.command == "ingest":
             stages, report = ingest(
                 args.video_url,
@@ -377,8 +476,7 @@ def main(argv: list[str] | None = None) -> int:
                 refresh=args.refresh,
                 overwrite=args.overwrite,
             )
-            _print_result(stages[-1].path, stages[-1].status, report)
-            return 0
+            return _stage_result(args, stages, report)
         if args.command == "acquire":
             stage = run_acquire(args.video_url, config, args.refresh)
             report = write_report(
@@ -387,79 +485,90 @@ def main(argv: list[str] | None = None) -> int:
                 [stage],
                 None if stage.status != "failed" else str(stage.details.get("error")),
             )
-            _print_result(stage.path, stage.status, report)
-            return 1 if stage.status == "failed" else 0
+            return _stage_result(args, [stage], report, 1 if stage.status == "failed" else 0)
         if args.command == "import-raw":
             stage = run_import(args.metadata, args.captions, config, args.language, args.refresh)
             report = write_report(config, "import-raw", [stage])
-            _print_result(stage.path, stage.status, report)
-            return 0
+            return _stage_result(args, [stage], report)
         if args.command == "build-source":
             stage = build_source(args.manifest, config.source_root, args.overwrite)
             report = write_report(config, "build-source", [stage])
-            _print_result(stage.path, stage.status, report)
-            return 0
+            return _stage_result(args, [stage], report)
         if args.command == "build-summary":
             stage = build_summary(
                 args.source_note, config.summary_root, provider_for_config(config), args.overwrite
             )
             report = write_report(config, "build-summary", [stage])
-            _print_result(stage.path, stage.status, report)
-            return 0
+            return _stage_result(args, [stage], report)
         if args.command == "list":
             logger.info("Listing acquired transcripts and corresponding notes")
-            print(
-                json.dumps(
-                    build_inventory(
-                        config.raw_root,
-                        config.source_root,
-                        config.summary_root,
-                    ),
-                    ensure_ascii=False,
-                    indent=2,
-                )
-            )
-            return 0
+            return _result(args, build_inventory(
+                config.raw_root, config.source_root, config.summary_root,
+            ))
         if args.command in ("validate", "status"):
             logger.info("Validating artifact: %s", args.path)
             kind, errors = validate_path(args.path, config.source_root)
-            payload: dict[str, Any] = {"kind": kind, "valid": not errors, "errors": errors}
+            payload: dict[str, Any] = {
+                "kind": kind, "valid": not errors, "errors": errors, "path": str(args.path),
+            }
             if args.command == "status" and kind == "summary":
                 metadata, _ = split_note(args.path.read_text(encoding="utf-8"))
                 payload["currency"] = summary_currency(
                     metadata, load_summary_profile(config.summary_profile)
                 )
-            print(
-                json.dumps(
-                    payload,
-                    ensure_ascii=False,
-                    indent=2,
-                )
-            )
             if errors:
                 logger.error("Validation failed for %s (%s)", args.path, kind)
             else:
                 log_success(logger, "Validation succeeded for %s (%s)", args.path, kind)
-            return 1 if errors else 0
-    except (OSError, ValueError, RuntimeError) as exc:
+            return _result(args, payload, 1 if errors else 0)
+    except ArgumentFailure as exc:
+        logger.error("%s", exc.message)
+        return _result(args, {
+            "status": "failed", "error_type": "argument_error", "error": exc.message,
+            "counts": {"failed": 1},
+        }, 2)
+    except BrokenPipeError:
+        # The consumer closed stdout; no second result can be delivered.
+        return 1
+    except KeyboardInterrupt:
+        logger.error("Interrupted; inspect existing outputs before retrying")
+        return _result(args, {
+            "status": "interrupted", "error": "interrupted", "targets": _targets(args, config),
+            "counts": {"interrupted": 1},
+        }, 130)
+    except Exception as exc:
+        message = _error_message(exc)
+        failure: dict[str, Any] = {
+            "status": "failed", "error_type": type(exc).__name__, "error": message,
+            "targets": _targets(args, config), "counts": {"failed": 1},
+        }
+        if isinstance(exc, OSError) and exc.filename:
+            failure["path"] = str(exc.filename)
+            if exc.filename2:
+                failure["path2"] = str(exc.filename2)
+        if args.command == "ingest" and "; report=" in message:
+            failure["error"], failure["report"] = message.rsplit("; report=", 1)
+            try:
+                saved = json.loads(Path(failure["report"]).read_text(encoding="utf-8"))
+                failure["stages"] = saved["stages"]
+                failure["counts"].update(Counter(row["status"] for row in saved["stages"]))
+            except (OSError, ValueError, KeyError, TypeError):
+                pass
         if (
             isinstance(exc, ProviderExecutionError)
             and config is not None
             and args.command in ("ingest", "build-summary")
             and not getattr(args, "dry_run", False)
         ):
-            report = write_report(
-                config,
-                args.command,
-                [],
-                str(exc),
-                diagnostic_output=exc.diagnostic_output,
-                provider_error=exc.error_details,
-            )
-            logger.error("%s; report=%s", exc, report)
-        else:
-            logger.error("%s", exc)
-        return 1
+            try:
+                failure["report"] = str(write_report(
+                    config, args.command, [], str(exc),
+                    diagnostic_output=exc.diagnostic_output, provider_error=exc.error_details,
+                ))
+            except Exception as report_exc:
+                failure["report_error"] = _error_message(report_exc)
+        logger.error("%s", failure["error"])
+        return _result(args, failure, 1)
     return 2
 
 

@@ -5,9 +5,10 @@ from types import SimpleNamespace
 
 import pytest
 
-from youtube_note_pipeline.cli import _configure_logging, _print_result, build_parser, main
+from youtube_note_pipeline.cli import _configure_logging, build_parser, main
 from youtube_note_pipeline.config import PipelineConfig
 from youtube_note_pipeline.console_logging import SUCCESS, ColorFormatter
+from youtube_note_pipeline.output import emit
 from youtube_note_pipeline.providers import ProviderExecutionError
 
 
@@ -60,7 +61,7 @@ def test_console_formatter_keeps_redirected_output_plain() -> None:
 
 
 def test_final_result_json_is_pretty_printed(capsys) -> None:
-    _print_result(Path("summary.md"), "created", Path("report.json"))
+    emit({"status": "created", "path": "summary.md", "report": "report.json"}, json_output=True)
 
     output = capsys.readouterr().out
     assert output == (
@@ -137,9 +138,9 @@ def test_config_init_is_idempotent_and_refuses_edited_file(
         lambda: target,
     )
 
-    assert main(["config", "init", "--quiet"]) == 0
+    assert main(["config", "init", "--json", "--quiet"]) == 0
     created = json.loads(capsys.readouterr().out)
-    assert created == {"status": "created", "path": str(target)}
+    assert created["status"] == "created" and created["path"] == str(target)
     assert "bridge_profile: codex-default" in target.read_text(encoding="utf-8")
     assert "summary_profile: default-ja" in target.read_text(encoding="utf-8")
 
@@ -148,12 +149,12 @@ def test_config_init_is_idempotent_and_refuses_edited_file(
     assert shown["values"]["generation"]["profiles"]["codex"]["bridge_profile"] == "codex-default"
     assert shown["values"]["fallback_languages"] == []
 
-    assert main(["config", "init", "--quiet"]) == 0
+    assert main(["config", "init", "--json", "--quiet"]) == 0
     unchanged = json.loads(capsys.readouterr().out)
-    assert unchanged == {"status": "unchanged", "path": str(target)}
+    assert unchanged["status"] == "unchanged" and unchanged["path"] == str(target)
 
     target.write_text("provider: edited\n", encoding="utf-8")
-    assert main(["config", "init", "--quiet"]) == 1
+    assert main(["config", "init", "--json", "--quiet"]) == 1
     assert "refusing to overwrite existing configuration" in capsys.readouterr().err
 
 

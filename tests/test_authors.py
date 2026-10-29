@@ -153,10 +153,14 @@ def test_cli_applies_author_plan_and_rejects_wrong_scope(setup_notes, monkeypatc
     config, _, _, summary, _ = setup_notes
     without_author(summary)
     monkeypatch.setattr(cli, "_resolved", lambda args: Mock(config=config, sources=[]))
-    assert cli.main(["migrate-notes", "--authors-only", "--dry-run", "--quiet"]) == 0
+    assert cli.main([
+        "--json", "--full-output", "migrate-notes", "--authors-only", "--dry-run", "--quiet",
+    ]) == 0
     plan_file = config.summary_root.parent / "plan.json"
     plan_file.write_text(capsys.readouterr().out, encoding="utf-8")
-    assert cli.main(["migrate-notes", "--apply-plan", str(plan_file), "--quiet"]) == 1
+    assert cli.main([
+        "--json", "--full-output", "migrate-notes", "--apply-plan", str(plan_file), "--quiet",
+    ]) == 1
     capsys.readouterr()
     assert "author" not in split_note(summary.read_text("utf-8"))[0]
     backup_root = config.summary_root.parent / "originals"
@@ -164,6 +168,7 @@ def test_cli_applies_author_plan_and_rejects_wrong_scope(setup_notes, monkeypatc
         cli.main(
             [
                 "migrate-notes",
+                "--json",
                 "--authors-only",
                 "--apply-plan",
                 str(plan_file),

@@ -105,7 +105,10 @@ def test_invalid_configuration_list_fails_without_writes(
     ]) == 1
     captured = capsys.readouterr()
     assert captured.err
-    assert captured.out == ""
+    if output_options:
+        assert json.loads(captured.out)["status"] == "failed"
+    else:
+        assert "status=failed" in captured.out.splitlines()
     assert not reports.exists()
     assert before == {p: p.read_bytes() for p in root.rglob("*") if p.is_file()}
 

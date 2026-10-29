@@ -280,7 +280,10 @@ def test_cli_profile_override_and_invalid_dry_run_are_read_only(
     config_path.write_text(json.dumps(config.model_dump(mode="json")), encoding="utf-8")
     monkeypatch.setattr("youtube_note_pipeline.config.global_config_path", lambda: config_path)
     shared_profile(tmp_path, provider="codex", model="shared-model", timeout_seconds=90.0)
-    base = ["build-summary", str(source), "--config", str(config_path), "--dry-run", "--quiet"]
+    base = [
+        "--json", "build-summary", str(source), "--config", str(config_path),
+        "--dry-run", "--quiet",
+    ]
     assert cli.main([*base, "--bridge-profile", "test", "--model", "cli-model"]) == 0
     plan = json.loads(capsys.readouterr().out)["details"]["bridge_plan"]
     assert plan["profile_name"] == "test"
